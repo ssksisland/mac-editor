@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git -C /Users/bilibili/Desktop/mac-editor status)",
-      "Bash(git -C /Users/bilibili/Desktop/mac-editor remote -v)"
-    ]
-  }
-}

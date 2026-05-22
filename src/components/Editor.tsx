@@ -154,6 +154,37 @@ function selectColumn(view: EditorView): boolean {
   return true;
 }
 
+/**
+ * 按行去重 — 类似 SQL DISTINCT。
+ * 有选区时仅对选中的行去重，无选区时对整个文档去重。
+ * 保留首次出现的行，维持原有顺序。
+ */
+function deduplicateLines(view: EditorView): boolean {
+  const state = view.state;
+  const sel = state.selection.main;
+  const hasSelection = sel.from !== sel.to;
+
+  const fromLine = state.doc.lineAt(sel.from);
+  const toLine = state.doc.lineAt(sel.to);
+  const from = hasSelection ? fromLine.from : 0;
+  const to = hasSelection ? toLine.from + toLine.length : state.doc.length;
+
+  const text = state.sliceDoc(from, to);
+  const lines = text.split(/\r?\n/);
+  const seen = new Set<string>();
+  const unique = lines.filter((line) => {
+    if (seen.has(line)) return false;
+    seen.add(line);
+    return true;
+  });
+
+  view.dispatch({
+    changes: { from, to, insert: unique.join('\n') },
+    scrollIntoView: true,
+  });
+  return true;
+}
+
 /* ==================== 全局 API ====================
  *
  * 通过 window.__macEditor 暴露给菜单栏按钮等外部调用方。
@@ -165,6 +196,11 @@ function selectColumn(view: EditorView): boolean {
     const view = activeView || [...viewsMap.values()].find(Boolean) || null;
     if (!view) return false;
     return selectColumn(view);
+  },
+  deduplicateLines: () => {
+    const view = activeView || [...viewsMap.values()].find(Boolean) || null;
+    if (!view) return false;
+    return deduplicateLines(view);
   },
   registerView: (tabId: string, view: EditorView) => {
     viewsMap.set(tabId, view);

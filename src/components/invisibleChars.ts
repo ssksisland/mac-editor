@@ -62,7 +62,8 @@ function buildDecorations(view: EditorView) {
 
     if (line.to < doc.length) {
       const ch = state.sliceDoc(line.to, line.to + 1);
-      const isCrlf = ch === '\n' && state.sliceDoc(line.to - 1, line.to) === '\r';
+      const nextCh = state.sliceDoc(line.to + 1, line.to + 2);
+	      const isCrlf = ch === '\r' && nextCh === '\n';
       builder.add(line.to, line.to, Decoration.widget({
         widget: new LineBreakWidget(isCrlf),
         side: 1,

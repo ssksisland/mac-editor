@@ -71,6 +71,8 @@ interface EditorState {
   addTab: (tab: Omit<Tab, 'id'>) => string;
   /** 关闭指定 tab，若为当前活跃 tab 则自动切换到最后一个 */
   removeTab: (id: string) => void;
+  /** 拖动重排 tab 顺序，fromIndex → toIndex */
+  moveTab: (fromIndex: number, toIndex: number) => void;
   /** 切换活跃 tab */
   setActiveTab: (id: string) => void;
   /** 更新 tab 内容（同时标记为已修改） */
@@ -140,6 +142,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             : null
           : state.activeTabId;
       return { tabs: newTabs, activeTabId };
+    });
+  },
+
+  moveTab: (fromIndex, toIndex) => {
+    set((state) => {
+      const tabs = [...state.tabs];
+      const [moved] = tabs.splice(fromIndex, 1);
+      tabs.splice(toIndex, 0, moved);
+      return { tabs };
     });
   },
 

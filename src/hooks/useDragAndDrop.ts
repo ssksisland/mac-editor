@@ -21,6 +21,7 @@ export function useDragAndDrop() {
   // Tauri native file drop bridge (set by Rust side)
   useEffect(() => {
     (window as any).__handleFileDrop = async (paths: string[]) => {
+      if (!paths || paths.length === 0) return; // 内部拖拽（tab 排序）无路径，放行 HTML5 事件
       setIsDragOver(false);
       for (const filePath of paths) {
         try {
@@ -50,7 +51,10 @@ export function useDragAndDrop() {
       }
     };
 
-    (window as any).__handleFileHover = () => setIsDragOver(true);
+    (window as any).__handleFileHover = (paths: string[]) => {
+      if (!paths || paths.length === 0) return; // 内部拖拽无文件路径，不显示覆盖层
+      setIsDragOver(true);
+    };
 
     return () => {
       delete (window as any).__handleFileDrop;
@@ -58,14 +62,20 @@ export function useDragAndDrop() {
     };
   }, [addTab]);
 
+  /** 判断拖拽操作是否包含实际文件（排除 tab 拖拽等内部操作） */
+  const isFileDrag = (e: DragEvent) =>
+    e.dataTransfer?.types.includes('Files') ?? false;
+
   // HTML5 drag-and-drop
   const handleDragOver = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
   }, []);
 
   const handleDragEnter = useCallback((e: DragEvent) => {
+    if (!isFileDrag(e)) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
@@ -84,6 +94,7 @@ export function useDragAndDrop() {
 
   const handleDrop = useCallback(
     async (e: DragEvent) => {
+      if (!isFileDrag(e)) return;
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);

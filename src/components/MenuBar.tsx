@@ -10,15 +10,15 @@ import { colors, menuButton, select } from '../styles';
 
 /** 支持的语言列表 */
 const LANGUAGES = [
-  { value: 'txt', label: '纯文本' },
-  { value: 'javascript', label: 'JavaScript / JSX' },
-  { value: 'typescript', label: 'TypeScript / TSX' },
+  { value: 'txt', label: 'Plain Text' },
+  { value: 'javascript', label: 'JavaScript' },
+  { value: 'typescript', label: 'TypeScript' },
   { value: 'python', label: 'Python' },
   { value: 'html', label: 'HTML' },
-  { value: 'css', label: 'CSS / SCSS / SASS' },
+  { value: 'css', label: 'CSS' },
   { value: 'json', label: 'JSON' },
   { value: 'markdown', label: 'Markdown' },
-  { value: 'shell', label: 'Shell / Bash / Zsh' },
+  { value: 'shell', label: 'Shell' },
   { value: 'c', label: 'C' },
   { value: 'cpp', label: 'C++' },
   { value: 'java', label: 'Java' },
@@ -28,7 +28,7 @@ const LANGUAGES = [
   { value: 'ruby', label: 'Ruby' },
   { value: 'perl', label: 'Perl' },
   { value: 'sql', label: 'SQL' },
-  { value: 'xml', label: 'XML / SVG' },
+  { value: 'xml', label: 'XML' },
   { value: 'yaml', label: 'YAML' },
   { value: 'dockerfile', label: 'Dockerfile' },
   { value: 'swift', label: 'Swift' },
@@ -37,11 +37,9 @@ const LANGUAGES = [
   { value: 'dart', label: 'Dart' },
   { value: 'r', label: 'R' },
   { value: 'lua', label: 'Lua' },
-  { value: 'toml', label: 'TOML / INI / Conf' },
+  { value: 'toml', label: 'TOML' },
   { value: 'nginx', label: 'Nginx' },
 ];
-
-const FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 22, 24];
 
 /**
  * MenuBar 组件
@@ -199,31 +197,33 @@ export default function MenuBar() {
         </svg>
       </button>
 
-      {/* Spacer pushes language + font to the right */}
+      {/* 按行去重按钮 — 调用 window.__macEditor.deduplicateLines() */}
+      <button
+        tabIndex={-1}
+        style={menuButton}
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => {
+          const editor = (window as any).__macEditor;
+          if (editor) {
+            editor.deduplicateLines();
+          }
+        }}
+        title="按行去重 — 选中行内去重，无选区则全文去重 (⌘⇧D)"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+          <line x1="2" y1="3" x2="14" y2="3" />
+          <line x1="2" y1="7" x2="10" y2="7" />
+          <line x1="2" y1="11" x2="12" y2="11" />
+          <path d="M12 7l2 0l0 4" />
+          <polyline points="11,9.5 12,11 13.5,9.5" strokeWidth="1" />
+        </svg>
+      </button>
+
+      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* 字体大小下拉选择 — 直接更新 store 中的 fontSize */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" style={{ verticalAlign: 'middle', color: colors.textSecondary }}>
-          <text x="1" y="12" fontSize="11" fill="currentColor" stroke="none" fontFamily="system-ui">T</text>
-        </svg>
-        <select
-          value={settings.fontSize}
-          onChange={(e) => updateSettings({ fontSize: Number(e.target.value) })}
-          style={select}
-          title="字体大小"
-        >
-          {FONT_SIZES.map((s) => (
-            <option key={s} value={s}>{s}px</option>
-          ))}
-        </select>
-      </div>
-
-      {/* 语言选择下拉 — 切换当前 tab 的语法高亮 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" style={{ verticalAlign: 'middle', color: colors.textSecondary }}>
-          <text x="0" y="12" fontSize="11" fill="currentColor" stroke="none" fontFamily="system-ui">文</text>
-        </svg>
+      {/* 语言选择下拉 */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <select
           value={activeTab?.language || 'txt'}
           onChange={handleLanguageChange}

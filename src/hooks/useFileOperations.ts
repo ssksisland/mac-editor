@@ -9,6 +9,21 @@ import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
 
+/** 根据已有 tab 列表生成下一个未命名 tab 的名称 */
+export function getNextUntitledName(tabs: Array<{ fileName: string }>): string {
+  let maxNum = 0;
+  for (const t of tabs) {
+    const m = t.fileName.match(/^未命名(?:(\d+))?$/);
+    if (m) {
+      maxNum = Math.max(maxNum, m[1] ? parseInt(m[1], 10) : 0);
+    }
+  }
+  if (maxNum === 0) {
+    return tabs.some((t) => t.fileName === '未命名') ? '未命名1' : '未命名';
+  }
+  return `未命名${maxNum + 1}`;
+}
+
 /** Unified file operations. */
 export function useFileOperations() {
   const tabs = useEditorStore((state) => state.tabs);
@@ -27,7 +42,7 @@ export function useFileOperations() {
   const newFile = () => {
     addTab({
       filePath: null,
-      fileName: '未命名',
+      fileName: getNextUntitledName(tabs),
       content: '',
       isModified: false,
       encoding: 'utf-8',

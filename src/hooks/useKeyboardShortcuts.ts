@@ -54,7 +54,13 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + W: Close tab
       if (mod && e.key === 'w') {
         e.preventDefault();
-        if (activeTabId) removeTab(activeTabId);
+        if (!activeTabId) return;
+        const activeTab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
+        if (activeTab?.isModified) {
+          window.dispatchEvent(new CustomEvent('mac-editor:close-tab', { detail: activeTab }));
+        } else {
+          removeTab(activeTabId);
+        }
         return;
       }
 
@@ -83,6 +89,13 @@ export function useKeyboardShortcuts() {
       if (mod && e.key === 'f') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('mac-editor:open-search'));
+        return;
+      }
+
+      // Cmd/Ctrl + Shift + D: Deduplicate lines
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        (window as any).__macEditor?.deduplicateLines?.();
         return;
       }
 

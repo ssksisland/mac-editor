@@ -92,6 +92,7 @@ App.tsx (垂直布局)
 
 | 文件 | 字段 | 作用 |
 |------|------|------|
+| `package.json` | `version` | npm 脚本显示（`mac-editor@0.2.0 tauri`）|
 | `src-tauri/tauri.conf.json` | `version` | 打包文件名（DMG、App）|
 | `src-tauri/Cargo.toml` | `version` | Rust 侧版本 |
 | Git tag | `vX.Y.Z` | GitHub Releases |

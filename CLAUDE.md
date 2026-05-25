@@ -86,6 +86,24 @@ App.tsx (垂直布局)
 - `opener:default`, `dialog:default`, `fs:default`
 - `fs:allow-read-text-file`, `fs:allow-write-text-file`, `fs:allow-exists`
 
+## 版本发布
+
+每次发布新版本时，**三个地方**的版本号要同步更新：
+
+| 文件 | 字段 | 作用 |
+|------|------|------|
+| `src-tauri/tauri.conf.json` | `version` | 打包文件名（DMG、App）|
+| `src-tauri/Cargo.toml` | `version` | Rust 侧版本 |
+| Git tag | `vX.Y.Z` | GitHub Releases |
+
+完整流程：
+1. 更新 `CHANGELOG.md`（新版本章节）
+2. 更新 `CLAUDE.md`（架构/设计有变化时）
+3. 更新 `tauri.conf.json` 和 `Cargo.toml` 的 version
+4. `git add` + `git commit` + `git tag -a vX.Y.Z`
+5. `git push origin main --tags`
+6. GitHub 上从 tag 创建 Release
+
 ## 快捷键
 
 | 快捷键 | 功能 |

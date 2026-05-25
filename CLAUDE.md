@@ -88,7 +88,7 @@ App.tsx (垂直布局)
 
 ## 版本发布
 
-每次发布新版本时，**三个地方**的版本号要同步更新：
+每次发布新版本时，**四个地方**的版本号要同步更新：
 
 | 文件 | 字段 | 作用 |
 |------|------|------|
@@ -100,10 +100,11 @@ App.tsx (垂直布局)
 完整流程：
 1. 更新 `CHANGELOG.md`（新版本章节）
 2. 更新 `CLAUDE.md`（架构/设计有变化时）
-3. 更新 `tauri.conf.json` 和 `Cargo.toml` 的 version
-4. `git add` + `git commit` + `git tag -a vX.Y.Z`
-5. `git push origin main --tags`
-6. GitHub 上从 tag 创建 Release
+3. 更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 的 version
+4. `npm run tauri build` 构建 DMG
+5. 将 DMG 拷到 `releases/`：`cp src-tauri/target/release/bundle/dmg/mac-editor_X.Y.Z_aarch64.dmg releases/`
+6. `git add` + `git commit` + `git tag -a vX.Y.Z`
+7. `git push origin main --tags`
 
 ## 快捷键
 

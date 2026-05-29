@@ -104,7 +104,7 @@ App.tsx (垂直布局)
 
 | 文件 | 字段 | 作用 |
 |------|------|------|
-| `package.json` | `version` | npm 脚本显示（`mac-editor@0.2.0 tauri`）|
+| `package.json` | `version` | npm 脚本显示（`mac-editor@0.3.0 tauri`）|
 | `src-tauri/tauri.conf.json` | `version` | 打包文件名（DMG、App）|
 | `src-tauri/Cargo.toml` | `version` | Rust 侧版本 |
 | Git tag | `vX.Y.Z` | GitHub Releases |
@@ -112,11 +112,12 @@ App.tsx (垂直布局)
 完整流程：
 1. 更新 `CHANGELOG.md`（新版本章节）
 2. 更新 `CLAUDE.md`（架构/设计有变化时）
-3. 更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 的 version
-4. `npm run tauri build` 构建 DMG
-5. 将 DMG 拷到 `releases/`：`cp src-tauri/target/release/bundle/dmg/mac-editor_X.Y.Z_aarch64.dmg releases/`
-6. `git add` + `git commit` + `git tag -a vX.Y.Z`
-7. `git push origin main --tags`
+3. 更新 `README.md`（版本号 + 新功能列表）
+4. 更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 的 version
+5. `npm run tauri build` 构建 DMG
+6. 将 DMG 拷到 `releases/`：`cp src-tauri/target/release/bundle/dmg/mac-editor_X.Y.Z_aarch64.dmg releases/`
+7. `git add` + `git commit` + `git tag -a vX.Y.Z`
+8. `git push origin main --tags`
 
 ## 快捷键
 

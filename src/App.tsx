@@ -19,11 +19,14 @@ import StatusBar from './components/StatusBar';
 import SearchPanel from './components/SearchPanel';
 import GotoLinePanel from './components/GotoLinePanel';
 import CloseSaveDialog from './components/CloseSaveDialog';
+import MarkdownPreview from './components/MarkdownPreview';
 import { colors, flexCenter } from './styles';
 
 function App() {
   const tabs = useEditorStore((state) => state.tabs);
   const activeTabId = useEditorStore((state) => state.activeTabId);
+  const showPreview = useEditorStore((s) => s.settings.showPreview);
+  const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const [showSearch, setShowSearch] = useState(false);
   const [showGotoLine, setShowGotoLine] = useState(false);
 
@@ -180,7 +183,18 @@ function App() {
       <TabBar />
       <div style={styles.content}>
         {/* 没有打开文件时显示欢迎界面 */}
-        {tabs.length === 0 ? <WelcomeScreen /> : <EditorTabs tabs={tabs} activeTabId={activeTabId} />}
+        {tabs.length === 0 ? (
+          <WelcomeScreen />
+        ) : (
+          <>
+            <div style={styles.editorPane}>
+              <EditorTabs tabs={tabs} activeTabId={activeTabId} />
+            </div>
+            {showPreview && activeTab?.language === 'markdown' && (
+              <MarkdownPreview content={activeTab.content} filePath={activeTab.filePath} />
+            )}
+          </>
+        )}
       </div>
       <StatusBar />
       {/* 按需渲染搜索和跳转面板 */}
@@ -260,6 +274,12 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     display: 'flex',
     overflow: 'hidden',
+  },
+  editorPane: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    position: 'relative',
   },
   dropOverlay: {
     position: 'absolute',

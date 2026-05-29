@@ -14,12 +14,13 @@ npm run build        # 生产构建
 
 ```
 App.tsx (垂直布局)
-├── MenuBar       — 新建/打开/保存、语言切换、列选择、按行去重
+├── MenuBar       — 新建/打开/保存、语言切换、列选择、按行去重、Markdown 预览
 ├── TabBar        — 多 tab 标签页，拖拽排序，双击重命名，双击空白新建
 ├── Editor        — CodeMirror 6 封装，一个 tab 一个实例
 │   ├── searchHighlight.ts  — 搜索匹配高亮（StateEffect + StateField）
 │   ├── invisibleChars.ts   — 不可见字符显示（ViewPlugin + WidgetType）
 │   └── GotoLinePanel
+├── MarkdownPreview — Markdown 实时预览（左右分屏，300ms debounce）
 ├── StatusBar     — 行列号 / 编码 / 语言（200ms 轮询）
 ├── SearchPanel   — 搜索+替换（正则/Case/转义序列/标记所有）
 └── CloseSaveDialog — 关闭前保存询问（Excel 三按钮风格）
@@ -67,6 +68,7 @@ App.tsx (垂直布局)
 - `read_file_cmd` — 读文件 + 自动检测编码（chardetng → UTF-8）
 - `save_file_cmd` — 写磁盘
 - `detect_encoding_cmd` — 仅返回编码名
+- `read_image_data_url` — 读取图片文件并返回 base64 data URL（用于 Markdown 预览）
 - 拖拽事件：Tauri `DragDropEvent` → JS `window.__handleFileDrop()`
 
 ### 拖拽（useDragAndDrop.ts）
@@ -79,12 +81,22 @@ App.tsx (垂直布局)
 - `viewsMap`（`Map<tabId, EditorView>`）和 `activeView` 是模块级变量，不放在 React state/ref 里
 - 原因：Vite HMR 重渲染组件但保留模块作用域，放 ref 里会丢实例
 
+### MarkdownPreview.tsx — Markdown 实时预览
+- 仅当 `activeTab.language === 'markdown'` 时菜单栏显示预览按钮
+- 点击按钮切换 `settings.showPreview`，右侧出现预览面板（左右分屏，各占 50%）
+- 使用 `marked` 库解析 Markdown → HTML，300ms debounce
+- 本地图片（绝对路径 `/Users/...` 和相对路径 `./img.png`）通过 Rust `read_image_data_url` 命令读取为 base64 data URL
+- 相对路径基于当前 Markdown 文件的 `filePath` 所在目录解析
+- 自定义 marked 渲染器输出 `<img data-local-src="...">`，useEffect 异步调用 invoke 加载图片
+- GitHub 风格渲染样式定义在 `App.css` 的 `.markdown-body` 类中
+
 ## 权限（Tauri Capabilities）
 
 `src-tauri/capabilities/default.json`:
 - `core:default`, `core:window:allow-close`, `core:window:allow-destroy`
 - `opener:default`, `dialog:default`, `fs:default`
 - `fs:allow-read-text-file`, `fs:allow-write-text-file`, `fs:allow-exists`
+- `fs:read-all` — 允许读取任意路径的文件（Markdown 预览加载本地图片需要）
 
 ## 版本发布
 

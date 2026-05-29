@@ -2,6 +2,13 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v0.3.0] — 2026-05-29
+
+### Added
+- Markdown 实时预览 — 编辑 .md 文件时点击工具栏眼睛按钮，右侧显示渲染后的预览面板（左右分屏）
+- 本地图片支持 — 预览中绝对路径和相对路径图片通过 Rust 读取为 base64 data URL 显示
+- GitHub 风格 Markdown 渲染样式（标题、代码块、表格、引用块、任务列表等）
+
 ## [v0.2.0] — 2026-05-22
 
 ### Added

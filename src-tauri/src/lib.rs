@@ -1,4 +1,6 @@
 use std::fs;
+use std::path::Path;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use tauri::DragDropEvent;
 #[cfg(debug_assertions)]
 use tauri::Manager;
@@ -25,6 +27,30 @@ fn detect_encoding_cmd(path: String) -> Result<String, String> {
     detector.feed(&bytes, false);
     let detected = detector.guess(None, true);
     Ok(detected.name().to_string())
+}
+
+/// 读取图片文件并返回 data URL（base64 编码）。
+/// 用于 Markdown 预览中显示本地图片。
+#[tauri::command]
+fn read_image_data_url(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read image: {}", e))?;
+    let mime = match Path::new(&path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("svg") => "image/svg+xml",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
+        _ => "application/octet-stream",
+    };
+    let encoded = BASE64.encode(&bytes);
+    Ok(format!("data:{};base64,{}", mime, encoded))
 }
 
 fn emit_drag_event(window: &tauri::Window, event_name: &str, paths: &[std::path::PathBuf]) {
@@ -58,7 +84,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             read_file_cmd,
             save_file_cmd,
-            detect_encoding_cmd
+            detect_encoding_cmd,
+            read_image_data_url
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(dde) = event {

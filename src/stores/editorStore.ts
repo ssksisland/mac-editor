@@ -64,6 +64,7 @@ interface EditorState {
     tabSize: number;
     wordWrap: boolean;
     showInvisibleChars: boolean;
+    showPreview: boolean;
   };
 
   // --- Tab 操作 ---
@@ -119,6 +120,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     tabSize: 4,
     wordWrap: false,
     showInvisibleChars: false,
+    showPreview: false,
   },
 
   // 创建新 tab，生成唯一 ID 并激活它

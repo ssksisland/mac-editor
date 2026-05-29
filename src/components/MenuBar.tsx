@@ -219,6 +219,27 @@ export default function MenuBar() {
         </svg>
       </button>
 
+      {/* Markdown 预览按钮 — 仅在当前 tab 为 Markdown 时显示 */}
+      {activeTab?.language === 'markdown' && (
+        <>
+          <div style={styles.separator} />
+          <button
+            style={{
+              ...menuButton,
+              color: settings.showPreview ? colors.accent : colors.text,
+              fontWeight: settings.showPreview ? 700 : 400,
+            }}
+            onClick={() => updateSettings({ showPreview: !settings.showPreview })}
+            title="Markdown 预览"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+              <circle cx="8" cy="8" r="2.5" />
+            </svg>
+          </button>
+        </>
+      )}
+
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 

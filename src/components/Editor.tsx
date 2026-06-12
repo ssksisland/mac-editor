@@ -66,6 +66,7 @@ import { xcodeLight } from '@uiw/codemirror-theme-xcode';
 import { useEditorStore } from '../stores/editorStore';
 import { highlightField } from '../searchHighlight';
 import { invisibleChars, toggleInvisible } from './invisibleChars';
+import { lineBookmark, toggleBookmarkEffect } from '../lineBookmark';
 
 /* ==================== 语言扩展注册表 ====================
  *
@@ -303,11 +304,23 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
    */
   const buildExtensions = useCallback(() => {
     return [
-      lineNumbers(),
+      lineNumbers({
+        // 点击行号 → 切换该行标记（Notepad++ 行为）
+        domEventHandlers: {
+          mousedown(view, line) {
+            view.dispatch({ effects: toggleBookmarkEffect.of(line.from) });
+            return true;
+          },
+        },
+      }),
+      lineBookmark(),  // 行标记圆点列（行号右侧、竖线左侧）
       highlightSpecialChars(),
       history(),
       drawSelection({ cursorBlinkRate: 1000 }),
-      rectangularSelection(),
+      // Cmd(mac)/Ctrl 拖动生成矩形列选区（多光标）
+      rectangularSelection({
+        eventFilter: (e) => (e.metaKey || e.ctrlKey) && e.button === 0,
+      }),
       bracketMatching(),
       closeBrackets(),
       autocompletion(),
@@ -408,6 +421,24 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
           },
         },
       ]),
+      // 拦截「文件」拖放：阻止 CodeMirror 默认把文件内容插入当前文档，
+      // 交由 document 层的 useDragAndDrop 打开新 tab（tab 拖拽等内部拖放放行）
+      EditorView.domEventHandlers({
+        drop: (event) => {
+          if (event.dataTransfer?.types.includes('Files')) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
+        },
+        dragover: (event) => {
+          if (event.dataTransfer?.types.includes('Files')) {
+            event.preventDefault();
+            return true;
+          }
+          return false;
+        },
+      }),
       // 监听编辑器变更：文档修改同步回 store、光标位置更新状态栏
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
@@ -424,7 +455,14 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       EditorView.theme({
         '&': { fontSize: `${fontSize}px`, fontFamily: fontFamily },
         '.cm-scroller': { overflow: 'auto' },
-        '.cm-content': { padding: '8px' },
+        // 上下留白用 content padding；左右留白放在 .cm-line 上，
+        // 否则多行选区中间行会从 content 左 padding 边缘起画，行首多出一段空白
+        '.cm-content': { padding: '8px 0' },
+        '.cm-line': { padding: '0 8px' },
+        // 把分隔竖线画在圆点标记列右侧，
+        // 使布局为：[行号][圆点] | [折叠列] [内容]
+        '.cm-gutters': { borderRight: 'none' },
+        '.cm-bookmark-gutter': { borderRight: '1px solid #e0e0e0' },
       }),
       xcodeLight,  // Xcode 风格主题
       highlightField,  // 搜索匹配高亮
@@ -477,10 +515,18 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       requestAnimationFrame(() => view.focus());
     }
 
-    /* Cmd+Click 添加光标 — 支持多光标编辑 */
+    /* Cmd+Click 添加光标 — 支持多光标编辑。
+       注意：Cmd+拖动用于矩形列选区（rectangularSelection），
+       拖动结束也会触发 click，需通过位移判断排除，避免覆盖列选区结果。 */
+    let downX = 0, downY = 0;
+    const handleMouseDown = (e: MouseEvent) => { downX = e.clientX; downY = e.clientY; };
     const handleClick = (e: MouseEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
+
+      // 位移超过阈值视为拖动（列选区），不加单光标
+      const moved = Math.abs(e.clientX - downX) > 3 || Math.abs(e.clientY - downY) > 3;
+      if (moved) return;
 
       const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
       if (pos === null) return;
@@ -497,9 +543,11 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       });
     };
 
+    containerRef.current.addEventListener('mousedown', handleMouseDown, { capture: true });
     containerRef.current.addEventListener('click', handleClick, { capture: true });
 
     return () => {
+      containerRef.current?.removeEventListener('mousedown', handleMouseDown, { capture: true });
       containerRef.current?.removeEventListener('click', handleClick, { capture: true });
       (window as any).__macEditor?.unregisterView?.(tabId);
       if (getActiveView() === view) {
@@ -547,7 +595,11 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
   useEffect(() => {
     isActiveRef.current = isActive;
     if (isActive && viewRef.current) {
-      requestAnimationFrame(() => viewRef.current!.focus());
+      const view = viewRef.current;
+      requestAnimationFrame(() => {
+        // view 可能在这一帧内被卸载/重建（viewRef 置空），用局部引用避免空指针
+        if (viewRef.current === view) view.focus();
+      });
       setActiveView(viewRef.current);
     } else if (getActiveView() === viewRef.current) {
       setActiveView(null);

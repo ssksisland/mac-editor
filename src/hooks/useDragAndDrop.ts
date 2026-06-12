@@ -8,9 +8,14 @@
  * 拖入的文件会被读取文本内容并创建新的 tab。
  */
 import { useEffect, useState, useCallback } from 'react';
-import { readTextFile } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
+
+interface FileReadResult {
+  content: string;
+  encoding: string;
+}
 
 /** Handle native file drop from Tauri and HTML5 drag-and-drop. */
 export function useDragAndDrop() {
@@ -33,14 +38,14 @@ export function useDragAndDrop() {
 
           const fileName =
             filePath.split('/').pop() || filePath.split('\\').pop() || 'unknown';
-          const text = await readTextFile(filePath);
+          const { content: text, encoding } = await invoke<FileReadResult>('read_file_cmd', { path: filePath });
           const language = detectLanguage(fileName);
           addTab({
             filePath,
             fileName,
             content: text,
             isModified: false,
-            encoding: 'utf-8',
+            encoding,
             language,
             editorView: null,
           });

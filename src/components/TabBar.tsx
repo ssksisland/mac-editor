@@ -8,6 +8,7 @@
  * - 每个 tab 有关闭按钮，修改过的 tab 名称前显示 ● 标记
  */
 import { useState, useCallback, useRef } from 'react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
 import { getNextUntitledName } from '../hooks/useFileOperations';
@@ -21,6 +22,7 @@ export default function TabBar() {
   const addTab = useEditorStore((s) => s.addTab);
   const moveTab = useEditorStore((s) => s.moveTab);
   const setTabFilePath = useEditorStore((s) => s.setTabFilePath);
+  const setTabFileName = useEditorStore((s) => s.setTabFileName);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -40,15 +42,38 @@ export default function TabBar() {
     setEditName(name);
   };
 
-  const finishEdit = () => {
-    if (editingId && editName.trim()) {
-      const name = editName.trim();
-      const lang = detectLanguage(name);
-      setTabFilePath(editingId, '', name);
-      setTabLanguage(editingId, lang);
-    }
+  const finishEdit = async () => {
+    const id = editingId;
+    const name = editName.trim();
     setEditingId(null);
     setEditName('');
+    if (!id || !name) return;
+
+    const tab = useEditorStore.getState().tabs.find((t) => t.id === id);
+    if (!tab || name === tab.fileName) return;
+
+    const lang = detectLanguage(name);
+
+    // 已保存文件：同步重命名磁盘上的实际文件
+    if (tab.filePath && isTauri()) {
+      try {
+        const newPath = await invoke<string>('rename_file_cmd', {
+          path: tab.filePath,
+          newName: name,
+        });
+        setTabFilePath(id, newPath, name);
+        setTabLanguage(id, lang);
+      } catch (err) {
+        // 磁盘重命名失败（目标已存在、权限等）：保持原名，提示用户
+        console.error('[rename] Failed:', err);
+        alert(`重命名失败：${err}`);
+      }
+      return;
+    }
+
+    // 未保存的新建 tab：磁盘上无文件，仅改显示名
+    setTabFileName(id, name);
+    setTabLanguage(id, lang);
   };
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
@@ -124,7 +149,7 @@ export default function TabBar() {
         <div
           key={tab.id}
           data-tab
-          draggable
+          draggable={editingId !== tab.id}
           onClick={() => setActiveTab(tab.id)}
           onDoubleClick={(e) => { e.stopPropagation(); startEdit(tab.id, tab.fileName); }}
           onDragStart={(e) => handleDragStart(e, idx)}

@@ -29,30 +29,31 @@ export function useKeyboardShortcuts() {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
 
       // Cmd/Ctrl + N: New file
-      if (mod && e.key === 'n' && !e.shiftKey) {
+      if (mod && key === 'n' && !e.shiftKey) {
         e.preventDefault();
         newFile();
         return;
       }
 
       // Cmd/Ctrl + O: Open file
-      if (mod && e.key === 'o') {
+      if (mod && key === 'o') {
         e.preventDefault();
         openFile();
         return;
       }
 
       // Cmd/Ctrl + S: Save
-      if (mod && e.key === 's') {
+      if (mod && key === 's') {
         e.preventDefault();
         saveFile();
         return;
       }
 
       // Cmd/Ctrl + W: Close tab
-      if (mod && e.key === 'w') {
+      if (mod && key === 'w') {
         e.preventDefault();
         if (!activeTabId) return;
         const activeTab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
@@ -86,14 +87,14 @@ export function useKeyboardShortcuts() {
       }
 
       // Cmd/Ctrl + F: Search / Find
-      if (mod && e.key === 'f') {
+      if (mod && key === 'f') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('mac-editor:open-search'));
         return;
       }
 
       // Cmd/Ctrl + Shift + D: Deduplicate lines
-      if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
+      if (mod && e.shiftKey && key === 'd') {
         e.preventDefault();
         (window as any).__macEditor?.deduplicateLines?.();
         return;
@@ -102,6 +103,7 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Tab  switching: Ctrl+Tab / Ctrl+Shift+Tab
       if (mod && e.key === 'Tab') {
         e.preventDefault();
+        if (tabs.length === 0) return;
         const idx = tabs.findIndex((t) => t.id === activeTabId);
         const newIdx = e.shiftKey
           ? idx <= 0

@@ -17,7 +17,8 @@ export default function CloseSaveDialog({ fileName, onSave, onSkip, onCancel }: 
 
   useEffect(() => {
     // 自动聚焦保存按钮
-    setTimeout(() => saveBtnRef.current?.focus(), 50);
+    const t = setTimeout(() => saveBtnRef.current?.focus(), 50);
+    return () => clearTimeout(t);
   }, []);
 
   return (

@@ -144,18 +144,23 @@ export default function MarkdownPreview({ content, filePath }: MarkdownPreviewPr
   useEffect(() => {
     if (!containerRef.current || !isTauri()) return;
 
+    let cancelled = false;
     const images = containerRef.current.querySelectorAll<HTMLImageElement>('img[data-local-src]');
     images.forEach(async (img) => {
       const localPath = img.getAttribute('data-local-src');
       if (!localPath) return;
       try {
         const dataUrl = await invoke<string>('read_image_data_url', { path: localPath });
+        if (cancelled) return; // html 已更新或组件卸载，丢弃过期结果
         img.src = dataUrl;
       } catch (e) {
+        if (cancelled) return;
         console.warn('Failed to load image:', localPath, e);
         img.alt = `[图片加载失败: ${localPath}]`;
       }
     });
+
+    return () => { cancelled = true; };
   }, [html]);
 
   return (

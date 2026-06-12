@@ -6,24 +6,26 @@
  * 无法识别时返回 'txt'（纯文本）。
  */
 export function detectLanguage(fileName: string): string {
-  const dotIndex = fileName.lastIndexOf('.');
-  if (dotIndex === -1 || dotIndex === fileName.length - 1) {
-    return 'txt';
-  }
-
-  const ext = fileName.slice(dotIndex + 1).toLowerCase();
-  const baseName = fileName.slice(0, dotIndex).toLowerCase();
-
   // Special filename-based detection (e.g., Dockerfile, Makefile)
+  // 必须在扩展名判断之前，否则无后缀文件（Dockerfile/README）会被提前判为 txt
   const filenameMap: Record<string, string> = {
     dockerfile: 'dockerfile',
     makefile: 'txt',
     license: 'txt',
     readme: 'markdown',
   };
+  const dotIndex = fileName.lastIndexOf('.');
+  // 用「点号前的部分」匹配，兼容带后缀的情况（如 Dockerfile.dev）
+  const baseName = (dotIndex === -1 ? fileName : fileName.slice(0, dotIndex)).toLowerCase();
   if (filenameMap[baseName]) {
     return filenameMap[baseName];
   }
+
+  if (dotIndex === -1 || dotIndex === fileName.length - 1) {
+    return 'txt';
+  }
+
+  const ext = fileName.slice(dotIndex + 1).toLowerCase();
 
   const langMap: Record<string, string> = {
     // Web

@@ -82,6 +82,8 @@ interface EditorState {
   setTabModified: (id: string, isModified: boolean) => void;
   /** 绑定 tab 到磁盘文件路径 */
   setTabFilePath: (id: string, filePath: string, fileName: string) => void;
+  /** 仅重命名 tab 显示名（不改文件路径） */
+  setTabFileName: (id: string, fileName: string) => void;
   /** 设置 tab 编码 */
   setTabEncoding: (id: string, encoding: string) => void;
   /** 设置 tab 语言 */
@@ -181,6 +183,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.map((t) =>
         t.id === id ? { ...t, filePath, fileName } : t
+      ),
+    }));
+  },
+
+  // 仅重命名 tab 显示名，保留 filePath 不变
+  setTabFileName: (id, fileName) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === id ? { ...t, fileName } : t
       ),
     }));
   },

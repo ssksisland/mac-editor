@@ -18,7 +18,8 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(t);
   }, []);
 
   const handleGoto = () => {

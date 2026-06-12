@@ -46,7 +46,11 @@ function buildDecorations(view: EditorView) {
   const doc = view.state.doc;
   const { state } = view;
 
-  for (let i = 1; i <= doc.lines; i++) {
+  // 仅遍历视口覆盖的行，避免大文件全文档扫描 + 生成百万级装饰
+  const firstLine = doc.lineAt(view.viewport.from).number;
+  const lastLine = doc.lineAt(view.viewport.to).number;
+
+  for (let i = firstLine; i <= lastLine; i++) {
     const line = doc.line(i);
 
     const start = Math.max(line.from, view.viewport.from);
@@ -63,7 +67,7 @@ function buildDecorations(view: EditorView) {
     if (line.to < doc.length) {
       const ch = state.sliceDoc(line.to, line.to + 1);
       const nextCh = state.sliceDoc(line.to + 1, line.to + 2);
-	      const isCrlf = ch === '\r' && nextCh === '\n';
+      const isCrlf = ch === '\r' && nextCh === '\n';
       builder.add(line.to, line.to, Decoration.widget({
         widget: new LineBreakWidget(isCrlf),
         side: 1,

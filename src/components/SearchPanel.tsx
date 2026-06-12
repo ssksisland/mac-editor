@@ -82,6 +82,8 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     const matches: Array<{ from: number; to: number }> = [];
     let m: RegExpExecArray | null;
     while ((m = regex.exec(content)) !== null) {
+      // 跳过零宽匹配，否则 lastIndex 不前进会死循环（如 .* / a* / ^ / \b）
+      if (m[0].length === 0) { regex.lastIndex++; continue; }
       matches.push({ from: m.index, to: m.index + m[0].length });
     }
     setMatchCount(matches.length);
@@ -139,6 +141,7 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     let m: RegExpExecArray | null;
     let last: RegExpExecArray | null = null;
     while ((m = regex.exec(content)) !== null) {
+      if (m[0].length === 0) { regex.lastIndex++; continue; }
       if (m.index < currentPos) last = m;
       else break;
     }
@@ -146,7 +149,10 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     // Wrap to last match if none found
     if (!last) {
       regex.lastIndex = 0;
-      while ((m = regex.exec(content)) !== null) last = m;
+      while ((m = regex.exec(content)) !== null) {
+        if (m[0].length === 0) { regex.lastIndex++; continue; }
+        last = m;
+      }
     }
     if (last) {
       view.dispatch({
@@ -182,10 +188,14 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     if (!regex) return;
 
     const content = view.state.doc.toString();
-    const newContent = content.replace(regex, parseEscapeSequences(replaceTerm));
+    // 非正则模式下，$ 在替换串里有特殊含义（$&、$1…），需转义为字面量；
+    // 正则模式下保留 $ 替换语义。
+    const rawReplace = parseEscapeSequences(replaceTerm);
+    const replacement = useRegex ? rawReplace : rawReplace.replace(/\$/g, '$$$$');
+    const newContent = content.replace(regex, replacement);
     view.dispatch({ changes: { from: 0, to: content.length, insert: newContent } });
     findAllMatches();
-  }, [activeTab, searchTerm, replaceTerm, buildRegex, findAllMatches]);
+  }, [activeTab, searchTerm, replaceTerm, buildRegex, findAllMatches, useRegex]);
 
   /* Toggle marking (highlighting) all matches. */
   const handleMark = useCallback(() => {

@@ -45,6 +45,7 @@ function App() {
   // 关闭窗口前检查未保存的 tab
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
     getCurrentWindow().onCloseRequested((event) => {
       if (closingRef.current) return; // 自身触发的 close，放行
@@ -61,9 +62,13 @@ function App() {
       event.preventDefault();
       setCloseQueue(unsaved);
       setCloseIndex(0);
-    }).then((fn) => { unlisten = fn; });
+    }).then((fn) => {
+      // cleanup 可能早于 promise resolve（StrictMode 双挂载），此时立即解绑
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
 
-    return () => { unlisten?.(); };
+    return () => { cancelled = true; unlisten?.(); };
   }, []);
 
   // 同步 closeQueue 到 ref，供事件回调读取最新值

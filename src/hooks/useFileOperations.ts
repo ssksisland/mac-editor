@@ -5,9 +5,14 @@
  * 打开文件时自动检测语言、避免重复 tab、更新最近文件列表。
  */
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
+
+interface FileReadResult {
+  content: string;
+  encoding: string;
+}
 
 /** 根据已有 tab 列表生成下一个未命名 tab 的名称 */
 export function getNextUntitledName(tabs: Array<{ fileName: string }>): string {
@@ -32,6 +37,7 @@ export function useFileOperations() {
   const setTabModified = useEditorStore((state) => state.setTabModified);
   const setTabFilePath = useEditorStore((state) => state.setTabFilePath);
   const setTabLanguage = useEditorStore((state) => state.setTabLanguage);
+  const setTabEncoding = useEditorStore((state) => state.setTabEncoding);
   const addRecentFile = useEditorStore((state) => state.addRecentFile);
   const removeRecentFile = useEditorStore((state) => state.removeRecentFile);
   const activeTab = useEditorStore((state) =>
@@ -69,7 +75,7 @@ export function useFileOperations() {
 
       const fileName =
         selected.split('/').pop() || selected.split('\\').pop() || 'unknown';
-      const text = await readTextFile(selected);
+      const { content: text, encoding } = await invoke<FileReadResult>('read_file_cmd', { path: selected });
       const language = detectLanguage(fileName);
 
       addTab({
@@ -77,7 +83,7 @@ export function useFileOperations() {
         fileName,
         content: text,
         isModified: false,
-        encoding: 'utf-8',
+        encoding,
         language,
         editorView: null,
       });
@@ -102,7 +108,7 @@ export function useFileOperations() {
 
       const fileName =
         filePath.split('/').pop() || filePath.split('\\').pop() || 'unknown';
-      const text = await readTextFile(filePath);
+      const { content: text, encoding } = await invoke<FileReadResult>('read_file_cmd', { path: filePath });
       const language = detectLanguage(fileName);
 
       addTab({
@@ -110,7 +116,7 @@ export function useFileOperations() {
         fileName,
         content: text,
         isModified: false,
-        encoding: 'utf-8',
+        encoding,
         language,
         editorView: null,
       });
@@ -131,19 +137,29 @@ export function useFileOperations() {
 
     try {
       if (activeTab.filePath) {
-        await writeTextFile(activeTab.filePath, activeTab.content);
+        await invoke('save_file_cmd', {
+          path: activeTab.filePath,
+          content: activeTab.content,
+          encoding: activeTab.encoding,
+        });
         setTabModified(activeTab.id, false);
       } else {
         const filePath = await save({ defaultPath: activeTab.fileName });
         if (!filePath) return;
 
-        await writeTextFile(filePath, activeTab.content);
+        // 新文件统一以 UTF-8 写入
+        await invoke('save_file_cmd', {
+          path: filePath,
+          content: activeTab.content,
+          encoding: 'UTF-8',
+        });
         const fileName =
           filePath.split('/').pop() || filePath.split('\\').pop() || 'unknown';
         const language = detectLanguage(fileName);
 
         setTabFilePath(activeTab.id, filePath, fileName);
         setTabLanguage(activeTab.id, language);
+        setTabEncoding(activeTab.id, 'UTF-8');
         addRecentFile(filePath, fileName);
         setTabModified(activeTab.id, false);
       }

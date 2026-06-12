@@ -59,7 +59,7 @@ export default function StatusBar() {
       </div>
       <div style={styles.right}>
         {activeTab && <span>{activeTab.language.toUpperCase()}</span>}
-        <span>UTF-8</span>
+        <span>{(activeTab?.encoding ?? 'UTF-8').toUpperCase()}</span>
       </div>
     </div>
   );

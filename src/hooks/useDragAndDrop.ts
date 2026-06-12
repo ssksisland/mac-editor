@@ -8,7 +8,7 @@
  * 拖入的文件会被读取文本内容并创建新的 tab。
  */
 import { useEffect, useState, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
 
@@ -25,7 +25,9 @@ export function useDragAndDrop() {
 
   // Tauri native file drop bridge (set by Rust side)
   useEffect(() => {
-    (window as any).__handleFileDrop = async (paths: string[]) => {
+    // 打开一组文件路径：查重 → 读文件（含编码检测）→ 建 tab → 加最近列表。
+    // 由原生拖放、Finder「打开方式」(RunEvent::Opened) 共用。
+    const openPaths = async (paths: string[]) => {
       if (!paths || paths.length === 0) return; // 内部拖拽（tab 排序）无路径，放行 HTML5 事件
       setIsDragOver(false);
       for (const filePath of paths) {
@@ -51,15 +53,24 @@ export function useDragAndDrop() {
           });
           useEditorStore.getState().addRecentFile(filePath, fileName);
         } catch (error) {
-          console.error('[drop] Failed to read dropped file:', error);
+          console.error('[open] Failed to read file:', error);
         }
       }
     };
+
+    (window as any).__handleFileDrop = openPaths;
 
     (window as any).__handleFileHover = (paths: string[]) => {
       if (!paths || paths.length === 0) return; // 内部拖拽无文件路径，不显示覆盖层
       setIsDragOver(true);
     };
+
+    // 冷启动：取走 Rust 端缓冲的「打开方式」文件路径（webview 未就绪时存入）
+    if (isTauri()) {
+      invoke<string[]>('take_pending_files')
+        .then((paths) => { if (paths.length > 0) openPaths(paths); })
+        .catch((e) => console.error('[open] take_pending_files failed:', e));
+    }
 
     return () => {
       delete (window as any).__handleFileDrop;

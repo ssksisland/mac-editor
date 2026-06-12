@@ -2,6 +2,12 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v0.4.1] — 2026-06-12
+
+### Added
+- 支持 Finder「打开方式 → mac-editor」与拖到 Dock 图标打开文件（macOS 文件关联，关联所有文件类型）
+  - 冷启动（双击文件启动 app）与热启动（app 已开再打开文件）均支持，复用现有读取/编码检测/建 tab 逻辑
+
 ## [v0.4.0] — 2026-06-12
 
 ### Added

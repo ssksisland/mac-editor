@@ -1,9 +1,13 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use tauri::DragDropEvent;
-#[cfg(debug_assertions)]
-use tauri::Manager;
+use tauri::{DragDropEvent, Manager};
+
+/// 缓冲冷启动时（webview 未就绪）通过 Finder「打开方式」传入的文件路径，
+/// 待前端挂载后通过 take_pending_files 取走。
+#[derive(Default)]
+struct PendingFiles(Mutex<Vec<String>>);
 
 /// 读文件结果：内容 + 检测到的原始编码名（用于保存时回写同一编码）。
 #[derive(serde::Serialize)]
@@ -96,8 +100,14 @@ fn read_image_data_url(path: String) -> Result<String, String> {
     Ok(format!("data:{};base64,{}", mime, encoded))
 }
 
-fn emit_drag_event(window: &tauri::Window, event_name: &str, paths: &[std::path::PathBuf]) {
-    let path_strs: Vec<String> = paths
+/// 前端挂载后调用：取出并清空冷启动缓冲的文件路径。
+#[tauri::command]
+fn take_pending_files(state: tauri::State<PendingFiles>) -> Vec<String> {
+    let mut pending = state.0.lock().unwrap();
+    std::mem::take(&mut *pending)
+}
+
+fn emit_drag_event(window: &tauri::Window, event_name: &str, paths: &[std::path::PathBuf]) {    let path_strs: Vec<String> = paths
         .iter()
         .map(|p| p.to_string_lossy().to_string())
         .collect();
@@ -110,12 +120,31 @@ fn emit_drag_event(window: &tauri::Window, event_name: &str, paths: &[std::path:
     let _ = window.webviews().first().map(|w| w.eval(&js));
 }
 
+/// 通过 main 窗口的 webview 调用 window.__handleFileDrop(paths)。
+/// 返回是否成功注入（webview 不存在时返回 false，调用方应改为缓冲）。
+fn dispatch_open_files(app: &tauri::AppHandle, paths: &[String]) -> bool {
+    if paths.is_empty() {
+        return true;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let js = format!(
+            "window.__handleFileDrop && window.__handleFileDrop({});",
+            serde_json::to_string(paths).unwrap_or("[]".to_string())
+        );
+        let _ = window.eval(&js);
+        true
+    } else {
+        false
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(PendingFiles::default())
         .setup(|_app| {
             #[cfg(debug_assertions)]
             {
@@ -129,7 +158,8 @@ pub fn run() {
             save_file_cmd,
             detect_encoding_cmd,
             rename_file_cmd,
-            read_image_data_url
+            read_image_data_url,
+            take_pending_files
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(dde) = event {
@@ -145,6 +175,25 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // macOS Finder「打开方式」/拖到 Dock 图标 → RunEvent::Opened
+            if let tauri::RunEvent::Opened { urls } = event {
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|u| u.to_file_path().ok())
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect();
+                if paths.is_empty() {
+                    return;
+                }
+                // 尝试直接注入；webview 未就绪（冷启动）则缓冲，待前端拉取
+                if !dispatch_open_files(app_handle, &paths) {
+                    if let Some(state) = app_handle.try_state::<PendingFiles>() {
+                        state.0.lock().unwrap().extend(paths);
+                    }
+                }
+            }
+        });
 }

@@ -61,6 +61,7 @@ export default function TabBar() {
           path: tab.filePath,
           newName: name,
         });
+        useEditorStore.getState().renameRecentFile(tab.filePath, newPath, name);
         setTabFilePath(id, newPath, name);
         setTabLanguage(id, lang);
       } catch (err) {

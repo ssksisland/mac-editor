@@ -100,6 +100,8 @@ interface EditorState {
   addRecentFile: (filePath: string, fileName: string) => void;
   /** 从最近文件列表中移除 */
   removeRecentFile: (filePath: string) => void;
+  /** 重命名最近文件列表中的条目（路径+名字），不存在则忽略 */
+  renameRecentFile: (oldPath: string, newPath: string, newName: string) => void;
   getRecentFiles: () => RecentFile[];
   clearRecentFiles: () => void;
 
@@ -247,6 +249,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   removeRecentFile: (filePath) => {
     set((state) => {
       const newFiles = state.recentFiles.filter((f) => f.filePath !== filePath);
+      saveState({ recentFiles: newFiles });
+      return { recentFiles: newFiles };
+    });
+  },
+
+  // 重命名最近文件列表中的条目（文件改名后同步路径与显示名）
+  renameRecentFile: (oldPath, newPath, newName) => {
+    set((state) => {
+      if (!state.recentFiles.some((f) => f.filePath === oldPath)) return state;
+      const newFiles = state.recentFiles.map((f) =>
+        f.filePath === oldPath ? { ...f, filePath: newPath, fileName: newName } : f
+      );
       saveState({ recentFiles: newFiles });
       return { recentFiles: newFiles };
     });

@@ -2,6 +2,11 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v0.4.2] — 2026-06-12
+
+### Fixed
+- 标签页重命名文件后，「打开文件」的最近文件列表未同步更新（仍显示旧路径与旧名，点击可能打不开）
+
 ## [v0.4.1] — 2026-06-12
 
 ### Added

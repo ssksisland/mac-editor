@@ -2,6 +2,12 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v0.4.3] — 2026-06-12
+
+### Fixed
+- Markdown 预览中点击本地文件链接导致 webview 直接导航、整个 app 页面重载的问题
+  - 本地文件链接改为在编辑器新 tab 打开，远程链接（http/mailto 等）用系统默认应用打开，页内锚点保留默认行为
+
 ## [v0.4.2] — 2026-06-12
 
 ### Fixed

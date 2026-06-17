@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { marked, Renderer } from 'marked';
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 /** HTML 转义，防止 XSS */
 function escapeHtml(s: string): string {
@@ -162,6 +163,48 @@ export default function MarkdownPreview({ content, filePath }: MarkdownPreviewPr
 
     return () => { cancelled = true; };
   }, [html]);
+
+  // 拦截预览区链接点击：本地文件用编辑器新 tab 打开，远程链接用系统浏览器，
+  // 阻止 webview 直接导航（否则会把整个 app 页面替换/重载）
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a');
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+
+      // 页内锚点（#section）交给默认行为
+      if (href.startsWith('#')) return;
+
+      e.preventDefault();
+
+      if (!isTauri()) return;
+
+      if (isRemoteUrl(href) || /^(mailto:|tel:)/.test(href)) {
+        // 远程链接 / mailto：系统默认应用打开
+        openUrl(href).catch((err) => console.warn('打开链接失败:', href, err));
+        return;
+      }
+
+      // 本地文件链接：解析为绝对路径后用编辑器打开
+      const raw = href.replace(/^file:\/\//, '');
+      let target: string | null = null;
+      if (isLocalAbsPath(raw)) {
+        target = decodeURI(raw);
+      } else if (filePath) {
+        target = resolveRelativePath(filePath, decodeURI(raw));
+      }
+      if (target) {
+        (window as any).__handleFileDrop?.([target]);
+      }
+    };
+
+    container.addEventListener('click', handleClick, { capture: true });
+    return () => container.removeEventListener('click', handleClick, { capture: true });
+  }, [filePath]);
 
   return (
     <div ref={containerRef} style={styles.container}>

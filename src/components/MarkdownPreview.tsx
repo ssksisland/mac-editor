@@ -69,13 +69,41 @@ function resolveRelativePath(basePath: string, relativePath: string): string {
 }
 
 /**
+ * GitHub 风格 slug：小写、空格转连字符、去除非单词字符（保留中文/字母数字/连字符）。
+ */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/<[^>]+>/g, '')          // 去标签
+    .replace(/[^\w一-龥\- ]/g, '') // 去标点（保留中文、字母数字、连字符、空格）
+    .replace(/\s+/g, '-');
+}
+
+/**
  * 创建自定义渲染器。
  * 本地图片输出为 <img data-local-src="..." src="" /> 形式，
  * 后续由 useEffect 异步加载。
+ * 标题生成 GitHub 风格 id（带去重），供页内锚点跳转。
  */
 function createRenderer(basePath: string | null) {
   const renderer = new Renderer();
+  const slugCounts: Record<string, number> = {};
   const defaultImage = renderer.image.bind(renderer);
+
+  renderer.heading = function (token) {
+    const text = this.parser.parseInline(token.tokens);
+    let slug = slugify(token.text);
+    // 同名标题去重：model, model-1, model-2 ...
+    if (slugCounts[slug] !== undefined) {
+      slugCounts[slug]++;
+      slug = `${slug}-${slugCounts[slug]}`;
+    } else {
+      slugCounts[slug] = 0;
+    }
+    return `<h${token.depth} id="${escapeHtml(slug)}">${text}</h${token.depth}>\n`;
+  };
+
   renderer.image = function (token) {
     // 非 Tauri 环境或远程 URL，直接渲染
     if (!isTauri() || isRemoteUrl(token.href)) {
@@ -176,8 +204,14 @@ export default function MarkdownPreview({ content, filePath }: MarkdownPreviewPr
       const href = anchor.getAttribute('href');
       if (!href) return;
 
-      // 页内锚点（#section）交给默认行为
-      if (href.startsWith('#')) return;
+      // 页内锚点（#section）：手动滚动到对应标题（容器独立滚动，默认行为不可靠）
+      if (href.startsWith('#')) {
+        e.preventDefault();
+        const id = decodeURIComponent(href.slice(1));
+        const target = container.querySelector(`#${CSS.escape(id)}`);
+        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
 
       e.preventDefault();
 

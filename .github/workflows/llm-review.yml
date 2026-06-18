@@ -1,0 +1,38 @@
+name: LLM Code Review
+
+# PR 打开或更新时触发；仅发评论，不阻断合并
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write   # 发 PR 行级评论需要写权限
+
+jobs:
+  review:
+    name: LLM Review
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码（完整历史，便于算 base..head diff）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 安装审查脚本依赖（openai，独立于项目依赖）
+        run: npm install --no-save openai@^4
+
+      - name: 运行 LLM 代码审查
+        run: node .github/scripts/llm-review.mjs
+        env:
+          REVIEW_BASE_URL: ${{ secrets.REVIEW_BASE_URL }}
+          REVIEW_API_KEY: ${{ secrets.REVIEW_API_KEY }}
+          REVIEW_MODEL: ${{ secrets.REVIEW_MODEL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}

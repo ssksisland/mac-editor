@@ -2,6 +2,17 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v0.5.0] — 2026-06-18
+
+### Added
+- Markdown 预览支持三种模式：纯代码 / 分屏 / 预览全屏，单按钮循环切换
+  - 按钮图标左右半变蓝表示当前模式：纯代码=默认色，分屏=右半蓝，全屏=整个蓝
+- 引入 GitHub Actions CI：每次 push / Pull Request 自动运行 tsc 类型检查 + cargo check
+
+### Fixed
+- Markdown 预览页内锚点（如 `[标题](#标题)`）无法跳转：标题生成 id + 点击平滑滚动
+- 跨平台编译：`RunEvent::Opened` 缺少平台条件编译，导致非 macOS 平台无法编译
+
 ## [v0.4.3] — 2026-06-12
 
 ### Fixed

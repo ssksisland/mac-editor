@@ -64,7 +64,8 @@ interface EditorState {
     tabSize: number;
     wordWrap: boolean;
     showInvisibleChars: boolean;
-    showPreview: boolean;
+    /** Markdown 预览模式：code=纯编辑器 / split=分屏 / full=预览全屏 */
+    previewMode: 'code' | 'split' | 'full';
   };
 
   // --- Tab 操作 ---
@@ -124,7 +125,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     tabSize: 4,
     wordWrap: false,
     showInvisibleChars: false,
-    showPreview: false,
+    previewMode: 'code',
   },
 
   // 创建新 tab，生成唯一 ID 并激活它

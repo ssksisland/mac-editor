@@ -25,7 +25,7 @@ import { colors, flexCenter } from './styles';
 function App() {
   const tabs = useEditorStore((state) => state.tabs);
   const activeTabId = useEditorStore((state) => state.activeTabId);
-  const showPreview = useEditorStore((s) => s.settings.showPreview);
+  const previewMode = useEditorStore((s) => s.settings.previewMode);
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const [showSearch, setShowSearch] = useState(false);
   const [showGotoLine, setShowGotoLine] = useState(false);
@@ -192,10 +192,19 @@ function App() {
           <WelcomeScreen />
         ) : (
           <>
-            <div style={styles.editorPane}>
+            {/* full 模式下隐藏编辑器但不卸载，保留 CodeMirror 实例与光标/滚动状态 */}
+            <div
+              style={{
+                ...styles.editorPane,
+                display:
+                  activeTab?.language === 'markdown' && previewMode === 'full'
+                    ? 'none'
+                    : undefined,
+              }}
+            >
               <EditorTabs tabs={tabs} activeTabId={activeTabId} />
             </div>
-            {showPreview && activeTab?.language === 'markdown' && (
+            {activeTab?.language === 'markdown' && previewMode !== 'code' && (
               <MarkdownPreview content={activeTab.content} filePath={activeTab.filePath} />
             )}
           </>

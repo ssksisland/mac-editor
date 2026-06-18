@@ -178,7 +178,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
-            // macOS Finder「打开方式」/拖到 Dock 图标 → RunEvent::Opened
+            // RunEvent::Opened 仅在 macOS/iOS 存在（Finder「打开方式」/拖到 Dock 图标）。
+            // 其他平台没有该变体，需用条件编译跳过，否则无法编译。
+            #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 let paths: Vec<String> = urls
                     .iter()
@@ -194,6 +196,11 @@ pub fn run() {
                         state.0.lock().unwrap().extend(paths);
                     }
                 }
+            }
+            // 非 macOS：无需处理 Opened 事件，避免「未使用变量」告警
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app_handle, event);
             }
         });
 }

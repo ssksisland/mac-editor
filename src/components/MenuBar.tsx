@@ -219,24 +219,50 @@ export default function MenuBar() {
         </svg>
       </button>
 
-      {/* Markdown 预览按钮 — 仅在当前 tab 为 Markdown 时显示 */}
+      {/* Markdown 预览按钮 — 仅在当前 tab 为 Markdown 时显示。
+          单按钮循环三态，用图标左右半颜色表达：
+          code=全默认色 / split=右半蓝 / full=全蓝 */}
       {activeTab?.language === 'markdown' && (
         <>
           <div style={styles.separator} />
-          <button
-            style={{
-              ...menuButton,
-              color: settings.showPreview ? colors.accent : colors.text,
-              fontWeight: settings.showPreview ? 700 : 400,
-            }}
-            onClick={() => updateSettings({ showPreview: !settings.showPreview })}
-            title="Markdown 预览"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
-              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
-              <circle cx="8" cy="8" r="2.5" />
-            </svg>
-          </button>
+          {(() => {
+            const mode = settings.previewMode;
+            const next =
+              mode === 'code' ? 'split' : mode === 'split' ? 'full' : 'code';
+            // 左半：仅 full 时蓝；右半：split 或 full 时蓝
+            const leftColor = mode === 'full' ? colors.accent : colors.text;
+            const rightColor = mode === 'split' || mode === 'full' ? colors.accent : colors.text;
+            const title =
+              mode === 'code'
+                ? 'Markdown 预览：纯代码（点击切换分屏）'
+                : mode === 'split'
+                  ? 'Markdown 预览：分屏（点击切换全屏预览）'
+                  : 'Markdown 预览：全屏预览（点击切回纯代码）';
+            return (
+              <button
+                style={menuButton}
+                onClick={() => updateSettings({ previewMode: next })}
+                title={title}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle' }}>
+                  <defs>
+                    <clipPath id="eye-left"><rect x="0" y="0" width="8" height="16" /></clipPath>
+                    <clipPath id="eye-right"><rect x="8" y="0" width="8" height="16" /></clipPath>
+                  </defs>
+                  {/* 左半图标 */}
+                  <g clipPath="url(#eye-left)" stroke={leftColor}>
+                    <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+                    <circle cx="8" cy="8" r="2.5" />
+                  </g>
+                  {/* 右半图标 */}
+                  <g clipPath="url(#eye-right)" stroke={rightColor}>
+                    <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" />
+                    <circle cx="8" cy="8" r="2.5" />
+                  </g>
+                </svg>
+              </button>
+            );
+          })()}
         </>
       )}
 

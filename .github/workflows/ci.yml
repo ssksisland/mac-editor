@@ -1,0 +1,58 @@
+name: CI
+
+# 触发时机：push 到 main，或任何 Pull Request
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 任务一：前端类型检查
+  frontend:
+    name: Frontend (tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node 22（并缓存 npm 依赖）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit
+
+  # 任务二：Rust 编译检查
+  rust:
+    name: Rust (cargo check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      # Tauri 2 在 Linux 上编译需要这些系统库，否则 cargo check 会失败
+      - name: 安装 Tauri 系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: 安装 Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      # 缓存 Rust 编译产物，第二次起大幅加速
+      - name: 缓存 Rust 构建
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Cargo 编译检查
+        run: cargo check --manifest-path src-tauri/Cargo.toml

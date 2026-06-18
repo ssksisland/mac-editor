@@ -81,6 +81,10 @@ function parseDiff(raw) {
         continue;
       }
       if (!inHunk) continue;
+      // diff 元数据行（如 "\ No newline at end of file"）：不是真实内容，跳过且不递增行号
+      if (line.startsWith('\\')) {
+        continue;
+      }
       if (line.startsWith('+')) {
         validLines.add(newLineNo);
         patchLines.push(`${newLineNo}: ${line}`); // 给 LLM 标注行号

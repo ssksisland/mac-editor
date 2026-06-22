@@ -56,6 +56,7 @@ export interface Tab {
 interface EditorState {
   tabs: Tab[];
   activeTabId: string | null;
+  activePage: 'editor' | 'todo';
   cursorPosition: { line: number; column: number };
   recentFiles: RecentFile[];
   settings: {
@@ -77,6 +78,8 @@ interface EditorState {
   moveTab: (fromIndex: number, toIndex: number) => void;
   /** 切换活跃 tab */
   setActiveTab: (id: string) => void;
+  /** 切换到固定的 Todo 页面 */
+  showTodoPage: () => void;
   /** 更新 tab 内容（同时标记为已修改） */
   updateTabContent: (id: string, content: string) => void;
   /** 设置 tab 的修改状态 */
@@ -116,6 +119,7 @@ const generateId = () => `tab-${Date.now()}-${Math.random().toString(36).slice(2
 export const useEditorStore = create<EditorState>((set, get) => ({
   tabs: [],
   activeTabId: null,
+  activePage: 'editor',
   cursorPosition: { line: 1, column: 1 },
   // 从 localStorage 恢复最近文件列表
   recentFiles: initialState?.recentFiles || [],
@@ -134,6 +138,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       tabs: [...state.tabs, { ...tab, id }],
       activeTabId: id,
+      activePage: 'editor',
     }));
     return id;
   },
@@ -161,7 +166,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  setActiveTab: (id) => set({ activeTabId: id }),
+  setActiveTab: (id) => set({ activeTabId: id, activePage: 'editor' }),
+
+  showTodoPage: () => set({ activePage: 'todo' }),
 
   // 更新内容时自动标记为已修改
   updateTabContent: (id, content) => {

@@ -19,6 +19,7 @@ import { useFileOperations } from '../hooks/useFileOperations';
 export function useKeyboardShortcuts() {
   const tabs = useEditorStore((state) => state.tabs);
   const activeTabId = useEditorStore((state) => state.activeTabId);
+  const activePage = useEditorStore((state) => state.activePage);
   const removeTab = useEditorStore((state) => state.removeTab);
   const setActiveTab = useEditorStore((state) => state.setActiveTab);
   const addTab = useEditorStore((state) => state.addTab);
@@ -48,6 +49,7 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + S: Save
       if (mod && key === 's') {
         e.preventDefault();
+        if (activePage === 'todo') return;
         saveFile();
         return;
       }
@@ -55,6 +57,7 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + W: Close tab
       if (mod && key === 'w') {
         e.preventDefault();
+        if (activePage === 'todo') return;
         if (!activeTabId) return;
         const activeTab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
         if (activeTab?.isModified) {
@@ -89,6 +92,7 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + F: Search / Find
       if (mod && key === 'f') {
         e.preventDefault();
+        if (activePage === 'todo') return;
         window.dispatchEvent(new CustomEvent('mac-editor:open-search'));
         return;
       }
@@ -96,6 +100,7 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + Shift + D: Deduplicate lines
       if (mod && e.shiftKey && key === 'd') {
         e.preventDefault();
+        if (activePage === 'todo') return;
         (window as any).__macEditor?.deduplicateLines?.();
         return;
       }
@@ -118,6 +123,7 @@ export function useKeyboardShortcuts() {
     },
     [
       activeTabId,
+      activePage,
       tabs,
       settings.fontSize,
       newFile,

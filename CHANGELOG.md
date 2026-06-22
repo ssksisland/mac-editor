@@ -2,6 +2,20 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [v1.0.0] — 2026-06-22
+
+首个正式版本。mac-editor 已具备完整的桌面代码编辑能力与工程化流程。
+
+### Added
+- LLM 代码审查 CI：PR 自动用 LLM（OpenAI 兼容端点）审查改动 diff，行级评论，仅建议不阻断合并
+
+### 里程碑（自 0.x 累积的核心能力）
+- 多标签页编辑、30+ 语言语法高亮、编码自动检测与按原编码保存
+- Markdown 预览三模式（纯代码 / 分屏 / 预览全屏），本地图片、页内锚点跳转
+- 多光标与列编辑、行标记、按行去重、不可见字符显示
+- Finder「打开方式」与文件拖放打开、标签页重命名同步磁盘文件
+- 工程化：GitHub Actions CI（tsc + cargo check）、分支保护门禁、PR 工作流
+
 ## [v0.5.0] — 2026-06-18
 
 ### Added

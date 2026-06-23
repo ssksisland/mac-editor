@@ -2,6 +2,13 @@
 
 All notable changes to mac-editor will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Todo List 固定标签页：支持新建、编辑、完成、删除、完成动画及创建/完成时间记录
+- Todo 数据保存到应用数据目录的版本化 JSON 文件，支持原子替换、备份恢复和 Demo `localStorage` 自动迁移
+- Todo 持久化 Rust 单元测试并接入 CI
+
 ## [v1.0.0] — 2026-06-22
 
 首个正式版本。mac-editor 已具备完整的桌面代码编辑能力与工程化流程。

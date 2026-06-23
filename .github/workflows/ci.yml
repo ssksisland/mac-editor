@@ -56,3 +56,6 @@ jobs:
 
       - name: Cargo 编译检查
         run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Cargo 单元测试
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { isTauri } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { useEditorStore } from './stores/editorStore';
@@ -20,11 +21,13 @@ import SearchPanel from './components/SearchPanel';
 import GotoLinePanel from './components/GotoLinePanel';
 import CloseSaveDialog from './components/CloseSaveDialog';
 import MarkdownPreview from './components/MarkdownPreview';
+import TodoPage from './components/TodoPage';
 import { colors, flexCenter } from './styles';
 
 function App() {
   const tabs = useEditorStore((state) => state.tabs);
   const activeTabId = useEditorStore((state) => state.activeTabId);
+  const activePage = useEditorStore((state) => state.activePage);
   const previewMode = useEditorStore((s) => s.settings.previewMode);
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? null;
   const [showSearch, setShowSearch] = useState(false);
@@ -44,6 +47,7 @@ function App() {
 
   // 关闭窗口前检查未保存的 tab
   useEffect(() => {
+    if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     let cancelled = false;
 
@@ -187,30 +191,34 @@ function App() {
       <MenuBar />
       <TabBar />
       <div style={styles.content}>
-        {/* 没有打开文件时显示欢迎界面 */}
-        {tabs.length === 0 ? (
+        {tabs.length > 0 && (
+          /* Todo/full preview 模式只隐藏编辑器，保持 CodeMirror 实例与光标/滚动状态。 */
+          <div
+            style={{
+              ...styles.editorPane,
+              display:
+                activePage === 'todo'
+                || (activeTab?.language === 'markdown' && previewMode === 'full')
+                  ? 'none'
+                  : undefined,
+            }}
+          >
+            <EditorTabs tabs={tabs} activeTabId={activeTabId} />
+          </div>
+        )}
+        {activePage === 'todo' ? (
+          <TodoPage />
+        ) : tabs.length === 0 ? (
           <WelcomeScreen />
         ) : (
           <>
-            {/* full 模式下隐藏编辑器但不卸载，保留 CodeMirror 实例与光标/滚动状态 */}
-            <div
-              style={{
-                ...styles.editorPane,
-                display:
-                  activeTab?.language === 'markdown' && previewMode === 'full'
-                    ? 'none'
-                    : undefined,
-              }}
-            >
-              <EditorTabs tabs={tabs} activeTabId={activeTabId} />
-            </div>
             {activeTab?.language === 'markdown' && previewMode !== 'code' && (
               <MarkdownPreview content={activeTab.content} filePath={activeTab.filePath} />
             )}
           </>
         )}
       </div>
-      <StatusBar />
+      {activePage === 'editor' && <StatusBar />}
       {/* 按需渲染搜索和跳转面板 */}
       {showSearch && <SearchPanel onClose={() => setShowSearch(false)} />}
       {showGotoLine && <GotoLinePanel onClose={() => setShowGotoLine(false)} />}

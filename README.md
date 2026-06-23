@@ -17,6 +17,7 @@
 - **关闭保存确认** — 关闭 tab 或窗口时逐个询问是否保存（Excel 风格）
 - **文件拖放打开** — 从 Finder 拖入文件直接打开
 - **Finder 打开方式** — 在 Finder 中用 mac-editor 打开任意文件
+- **Todo List** — 固定 Todo 标签页，支持新建、编辑、完成、删除及创建/完成时间记录，本地 JSON 持久化
 
 ## 安装
 
@@ -47,6 +48,16 @@ npm run tauri build
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/`。
+
+## Todo 数据
+
+Todo 数据保存在 Tauri 应用数据目录的 `todos.json` 中。macOS 默认位置通常为：
+
+```text
+~/Library/Application Support/com.bilibili.mac-editor/todos.json
+```
+
+同目录的 `todos.json.bak` 保存上一次数据。正常重启和覆盖安装新版本不会清除这些文件；首次从 Demo 升级时会自动迁移原有 WebView 数据。
 
 ## 技术栈
 

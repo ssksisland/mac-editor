@@ -17,6 +17,7 @@ import { colors } from '../styles';
 export default function TabBar() {
   const tabs = useEditorStore((s) => s.tabs);
   const activeTabId = useEditorStore((s) => s.activeTabId);
+  const activePage = useEditorStore((s) => s.activePage);
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const removeTab = useEditorStore((s) => s.removeTab);
   const addTab = useEditorStore((s) => s.addTab);
@@ -24,6 +25,7 @@ export default function TabBar() {
   const setTabFilePath = useEditorStore((s) => s.setTabFilePath);
   const setTabFileName = useEditorStore((s) => s.setTabFileName);
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
+  const showTodoPage = useEditorStore((s) => s.showTodoPage);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -118,14 +120,6 @@ export default function TabBar() {
     resetDrag();
   }, [moveTab, resetDrag]);
 
-  if (tabs.length === 0) {
-    return (
-      <div onDoubleClick={handleDoubleClickBar} style={styles.empty}>
-        没有打开的文件
-      </div>
-    );
-  }
-
   return (
     <div
       onDoubleClick={handleDoubleClickBar}
@@ -134,6 +128,27 @@ export default function TabBar() {
       onDragEnd={resetDrag}
       style={styles.root}
     >
+      <button
+        data-tab
+        className="todo-fixed-tab"
+        onClick={showTodoPage}
+        title="Todo List"
+        style={{
+          ...styles.todoTab,
+          background: activePage === 'todo' ? colors.background : 'transparent',
+          color: activePage === 'todo' ? colors.accent : colors.textTertiary,
+          borderRadius: activePage === 'todo' ? '7px 7px 0 0' : 0,
+          boxShadow: activePage === 'todo'
+            ? '0 -1px 2px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)'
+            : 'none',
+        }}
+      >
+        <span className="todo-fixed-tab-icon" aria-hidden="true">✓</span>
+        <span>Todo</span>
+      </button>
+      {tabs.length === 0 && activePage !== 'todo' && (
+        <span style={styles.emptyLabel}>没有打开的文件</span>
+      )}
       {tabs.map((tab, idx) => {
         // 蓝色插入指示线：dropIndex 是插入位置 (0 ~ tabs.length)
         const showBarLeft = dropIndex !== null && dropIndex === idx
@@ -142,8 +157,8 @@ export default function TabBar() {
           && idx === tabs.length - 1
           && dragIndex !== tabs.length - 1 && dragIndex !== tabs.length;
 
-        const isActive = tab.id === activeTabId;
-        const nextIsActive = tabs[idx + 1]?.id === activeTabId;
+        const isActive = activePage === 'editor' && tab.id === activeTabId;
+        const nextIsActive = activePage === 'editor' && tabs[idx + 1]?.id === activeTabId;
         const separator = !isActive && !nextIsActive && idx < tabs.length - 1;
 
         return (
@@ -235,15 +250,26 @@ const styles: Record<string, React.CSSProperties> = {
     overflowX: 'auto',
     cursor: 'pointer',
   },
-  empty: {
-    height: 38,
-    background: colors.surfaceAlt,
-    borderBottom: `1px solid ${colors.border}`,
+  emptyLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    color: colors.textSecondary,
+    fontSize: 13,
+    padding: '0 14px',
+    cursor: 'default',
+  },
+  todoTab: {
+    flex: '0 0 auto',
+    minWidth: 94,
+    padding: '0 15px',
+    border: 'none',
+    borderRight: `1px solid ${colors.border}`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: colors.textSecondary,
+    gap: 7,
     fontSize: 13,
+    fontWeight: 600,
     cursor: 'pointer',
   },
   tab: {

@@ -21,6 +21,7 @@ const {
   REVIEW_MODEL,
   REVIEW_TIMEOUT_MS,
   REVIEW_MAX_RETRIES,
+  REVIEW_MAX_BATCH_CHARS,
   REVIEW_LOG_RAW_RESPONSE,
   GITHUB_TOKEN,
   REPO,
@@ -112,6 +113,7 @@ const MAX_FILE_PATCH = 30_000;   // 单文件 patch 超此字节截断
 const MAX_TOTAL = 120_000;       // 总 diff 超此字节停止收集
 const REVIEW_TIMEOUT = parsePositiveInt(REVIEW_TIMEOUT_MS, 120_000);
 const REVIEW_RETRIES = parsePositiveInt(REVIEW_MAX_RETRIES, 1);
+const MAX_BATCH_CHARS = parsePositiveInt(REVIEW_MAX_BATCH_CHARS, 25_000);
 const LOG_RAW_RESPONSE = REVIEW_LOG_RAW_RESPONSE === '1' || REVIEW_LOG_RAW_RESPONSE === 'true';
 
 /**
@@ -203,7 +205,8 @@ function parseDiff(raw) {
 console.log(`[llm-review] 环境：node=${process.version} repo=${REPO} pr=#${PR_NUMBER}`);
 console.log(`[llm-review] commit：base=${shortSha(BASE_SHA)} head=${shortSha(HEAD_SHA)}`);
 console.log(
-  `[llm-review] LLM 配置：baseURL=${safeUrl(REVIEW_BASE_URL)} model=${REVIEW_MODEL || 'gpt-4o-mini'} timeout=${REVIEW_TIMEOUT}ms retries=${REVIEW_RETRIES}`,
+  `[llm-review] LLM 配置：baseURL=${safeUrl(REVIEW_BASE_URL)} model=${REVIEW_MODEL || 'gpt-4o-mini'} ` +
+    `timeout=${REVIEW_TIMEOUT}ms retries=${REVIEW_RETRIES} maxBatchChars=${MAX_BATCH_CHARS}`,
 );
 
 // ---- 取 diff ----
@@ -234,15 +237,43 @@ const SYSTEM_PROMPT = `你是一名资深代码审查员。只报告真实问题
 必须只返回 JSON，格式：
 {"issues":[{"file":"文件路径","line":行号(整数,必须是 diff 中带行号标注的某一行),"severity":"high|medium|low","comment":"简洁的中文问题说明与修复建议"}]}`;
 
-const userContent = files
-  .map((f) => `### 文件: ${f.path}\n（行首数字为新文件行号，+ 表示新增行）\n\`\`\`diff\n${f.patch}\n\`\`\``)
-  .join('\n\n');
+function filePrompt(file) {
+  return `### 文件: ${file.path}\n（行首数字为新文件行号，+ 表示新增行）\n\`\`\`diff\n${file.patch}\n\`\`\``;
+}
 
-let issues = [];
-try {
-  const client = await createOpenAIClient();
+function buildUserContent(batchFiles) {
+  return batchFiles.map(filePrompt).join('\n\n');
+}
+
+function makeBatches(reviewFiles) {
+  const batches = [];
+  let current = [];
+  let currentChars = 0;
+
+  for (const file of reviewFiles) {
+    const promptChars = filePrompt(file).length;
+    if (current.length > 0 && currentChars + promptChars > MAX_BATCH_CHARS) {
+      batches.push(current);
+      current = [];
+      currentChars = 0;
+    }
+    current.push(file);
+    currentChars += promptChars;
+  }
+
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+async function reviewBatch(client, batchFiles, batchIndex, batchCount) {
+  const userContent = buildUserContent(batchFiles);
   const startedAt = Date.now();
-  console.log(`[llm-review] LLM 请求开始：messages=2 userChars=${userContent.length}`);
+  const fileNames = batchFiles.map((file) => file.path).join(', ');
+  console.log(
+    `[llm-review] LLM batch ${batchIndex}/${batchCount} 请求开始：files=${batchFiles.length} ` +
+      `userChars=${userContent.length} files=[${fileNames}]`,
+  );
+
   const resp = await client.chat.completions.create({
     model: REVIEW_MODEL || 'gpt-4o-mini',
     temperature: 0,
@@ -252,21 +283,50 @@ try {
     ],
     response_format: { type: 'json_object' },
   });
-  console.log(`[llm-review] LLM 请求完成：elapsed=${elapsedMs(startedAt)} id=${resp.id ?? '(no id)'}`);
+
+  console.log(`[llm-review] LLM batch ${batchIndex}/${batchCount} 请求完成：elapsed=${elapsedMs(startedAt)} id=${resp.id ?? '(no id)'}`);
   const text = resp.choices?.[0]?.message?.content ?? '{}';
-  console.log(`[llm-review] LLM 响应：chars=${text.length} finishReason=${resp.choices?.[0]?.finish_reason ?? '(missing)'}`);
+  console.log(
+    `[llm-review] LLM batch ${batchIndex}/${batchCount} 响应：chars=${text.length} ` +
+      `finishReason=${resp.choices?.[0]?.finish_reason ?? '(missing)'}`,
+  );
   if (LOG_RAW_RESPONSE) {
-    console.log(`[llm-review] LLM 原始响应前 2000 字符：${text.slice(0, 2000)}`);
+    console.log(`[llm-review] LLM batch ${batchIndex}/${batchCount} 原始响应前 2000 字符：${text.slice(0, 2000)}`);
   }
-  // 解析兜底：剥离可能的 ```json 包裹
+
   const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
   const parsed = JSON.parse(cleaned);
-  issues = Array.isArray(parsed.issues) ? parsed.issues : [];
+  return Array.isArray(parsed.issues) ? parsed.issues : [];
+}
+
+let issues = [];
+const failedBatches = [];
+try {
+  const client = await createOpenAIClient();
+  const batches = makeBatches(files);
+  console.log(`[llm-review] LLM 分批：batches=${batches.length}`);
+
+  for (const [index, batchFiles] of batches.entries()) {
+    const batchNumber = index + 1;
+    try {
+      const batchIssues = await reviewBatch(client, batchFiles, batchNumber, batches.length);
+      console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 返回 ${batchIssues.length} 个问题`);
+      issues.push(...batchIssues);
+    } catch (e) {
+      const message = describeError(e);
+      failedBatches.push({ batch: batchNumber, files: batchFiles.map((file) => file.path), message });
+      console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 失败：${message}`);
+    }
+  }
+
+  if (issues.length === 0 && failedBatches.length === batches.length) {
+    skip(`所有 LLM batch 均失败，首个错误：${failedBatches[0]?.message ?? 'unknown'}`);
+  }
 } catch (e) {
   skip(`LLM 调用/解析失败：${describeError(e)}`);
 }
 
-console.log(`[llm-review] LLM 返回 ${issues.length} 个问题`);
+console.log(`[llm-review] LLM 返回 ${issues.length} 个问题，失败 batch=${failedBatches.length}`);
 
 // ---- 行号校验：只保留落在合法新增行上的评论 ----
 const byPath = new Map(files.map((f) => [f.path, f.validLines]));
@@ -286,13 +346,19 @@ for (const it of issues) {
 
 // ---- 汇总评论正文 ----
 let summary;
-if (issues.length === 0) {
+const failedBatchSummary = failedBatches.length
+  ? `\n\nLLM 审查未完整完成：${failedBatches.length} 个 batch 失败，请查看 Actions 日志。`
+  : '';
+if (issues.length === 0 && failedBatches.length === 0) {
   summary = '🤖 LLM 代码审查：本次改动未发现明显问题。（仅供参考，不替代人工审查）';
+} else if (issues.length === 0) {
+  summary = `🤖 LLM 代码审查：未返回可发布的问题，但部分审查请求失败。（仅建议，不阻断合并）${failedBatchSummary}`;
 } else {
   summary =
     `🤖 LLM 代码审查：发现 ${issues.length} 个潜在问题（**仅建议，不阻断合并**）。\n\n` +
     (orphan.length ? `未能定位到具体行的问题：\n${orphan.join('\n')}\n\n` : '') +
-    `> LLM 审查有随机性，可能误报或漏报，请结合人工判断。`;
+    `> LLM 审查有随机性，可能误报或漏报，请结合人工判断。` +
+    failedBatchSummary;
 }
 
 // ---- 调 GitHub PR Review API ----

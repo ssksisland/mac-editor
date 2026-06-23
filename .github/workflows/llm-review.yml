@@ -33,6 +33,7 @@ jobs:
           REVIEW_MODEL: ${{ secrets.REVIEW_MODEL }}
           REVIEW_TIMEOUT_MS: ${{ vars.REVIEW_TIMEOUT_MS }}
           REVIEW_MAX_RETRIES: ${{ vars.REVIEW_MAX_RETRIES }}
+          REVIEW_MAX_BATCH_CHARS: ${{ vars.REVIEW_MAX_BATCH_CHARS }}
           REVIEW_LOG_RAW_RESPONSE: ${{ vars.REVIEW_LOG_RAW_RESPONSE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}

@@ -22,6 +22,18 @@ PR 打开/更新时，自动用 LLM 审查本次改动的 diff，把发现的潜
 >
 > 不配 `REVIEW_API_KEY` 时，审查 job 会自动跳过（exit 0），不影响其他 CI。
 
+## 可选诊断配置
+
+在 GitHub 仓库 `Settings → Secrets and variables → Actions → Variables` 可添加：
+
+| Variable | 说明 | 默认值 |
+|----------|------|--------|
+| `REVIEW_TIMEOUT_MS` | LLM 请求超时时间，毫秒 | `120000` |
+| `REVIEW_MAX_RETRIES` | LLM SDK 请求重试次数 | `1` |
+| `REVIEW_LOG_RAW_RESPONSE` | 设为 `true` 或 `1` 时打印模型原始响应前 2000 字符 | 关闭 |
+
+脚本默认会打印端点、模型、diff 规模、过滤统计、请求耗时、错误类型、状态码和 request id；不会打印 `REVIEW_API_KEY`。
+
 ## ⚠️ 隐私提示
 
 本次 PR 改动的**代码 diff 会上传到所配置的 LLM 端点**。敏感 / 私有仓库请谨慎使用，或改用自托管模型（如 Ollama，配 `REVIEW_BASE_URL` 指向本地端点）。

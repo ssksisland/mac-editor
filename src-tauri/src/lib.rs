@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tauri::{DragDropEvent, Manager};
 
@@ -133,7 +134,11 @@ fn save_todos_to_path(path: &Path, todos: &[TodoItem]) -> Result<(), String> {
     };
     let json =
         serde_json::to_vec_pretty(&document).map_err(|e| format!("无法序列化 Todo 数据: {}", e))?;
-    let temp = path.with_extension("json.tmp");
+    // 临时文件名加入进程 ID + 原子自增序号，确保唯一：即便将来出现并发保存，
+    // 各写入也不会争抢同一个临时文件、互相截断或在 rename 时报错。
+    static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
+    let unique = format!("{}.{}", std::process::id(), TEMP_SEQ.fetch_add(1, Ordering::Relaxed));
+    let temp = path.with_extension(format!("json.{}.tmp", unique));
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)

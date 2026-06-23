@@ -48,16 +48,16 @@ export function useKeyboardShortcuts() {
 
       // Cmd/Ctrl + S: Save
       if (mod && key === 's') {
-        e.preventDefault();
         if (activePage === 'todo') return;
+        e.preventDefault();
         saveFile();
         return;
       }
 
       // Cmd/Ctrl + W: Close tab
       if (mod && key === 'w') {
-        e.preventDefault();
         if (activePage === 'todo') return;
+        e.preventDefault();
         if (!activeTabId) return;
         const activeTab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
         if (activeTab?.isModified) {
@@ -91,16 +91,16 @@ export function useKeyboardShortcuts() {
 
       // Cmd/Ctrl + F: Search / Find
       if (mod && key === 'f') {
-        e.preventDefault();
         if (activePage === 'todo') return;
+        e.preventDefault();
         window.dispatchEvent(new CustomEvent('mac-editor:open-search'));
         return;
       }
 
       // Cmd/Ctrl + Shift + D: Deduplicate lines
       if (mod && e.shiftKey && key === 'd') {
-        e.preventDefault();
         if (activePage === 'todo') return;
+        e.preventDefault();
         (window as any).__macEditor?.deduplicateLines?.();
         return;
       }

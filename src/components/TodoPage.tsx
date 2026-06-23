@@ -22,6 +22,9 @@ export default function TodoPage() {
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   const [completedOpen, setCompletedOpen] = useState(true);
   const exitTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // ref 同步跟踪退出中的 ID：state 更新是异步的，快速连点时闭包读到的 exitingIds 可能是旧值，
+  // 用 ref 做防重判断才能保证 action 不被重复触发。
+  const exitingRef = useRef<Set<string>>(new Set());
   const cancelEditRef = useRef(false);
 
   useEffect(() => {
@@ -31,6 +34,7 @@ export default function TodoPage() {
   useEffect(() => () => {
     exitTimers.current.forEach(clearTimeout);
     exitTimers.current.clear();
+    exitingRef.current.clear();
   }, []);
 
   const pending = todos
@@ -71,13 +75,15 @@ export default function TodoPage() {
   };
 
   const animateThen = (id: string, action: () => void) => {
-    if (exitingIds.has(id)) return;
+    if (exitingRef.current.has(id)) return;
+    exitingRef.current.add(id);
     setExitingIds((current) => new Set(current).add(id));
     const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 0
       : EXIT_DURATION;
     const timer = setTimeout(() => {
       action();
+      exitingRef.current.delete(id);
       setExitingIds((current) => {
         const next = new Set(current);
         next.delete(id);
@@ -288,8 +294,8 @@ function TodoRow({
       </div>
 
       <div className="todo-actions">
-        {!isCompleted && !editing && <button onClick={onStartEdit}>编辑</button>}
-        <button className="todo-delete" onClick={onDelete}>删除</button>
+        {!isCompleted && !editing && <button onClick={onStartEdit} disabled={exiting}>编辑</button>}
+        <button className="todo-delete" onClick={onDelete} disabled={exiting}>删除</button>
       </div>
       <div className="todo-meta">
         <span className="todo-time">创建于 {formatTime(todo.createdAt)}</span>

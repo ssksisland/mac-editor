@@ -22,6 +22,7 @@ const {
   REVIEW_TIMEOUT_MS,
   REVIEW_MAX_RETRIES,
   REVIEW_MAX_BATCH_CHARS,
+  REVIEW_CONCURRENCY: REVIEW_CONCURRENCY_ENV,
   REVIEW_LOG_RAW_RESPONSE,
   GITHUB_TOKEN,
   REPO,
@@ -113,7 +114,10 @@ const MAX_FILE_PATCH = 30_000;   // 单文件 patch 超此字节截断
 const MAX_TOTAL = 120_000;       // 总 diff 超此字节停止收集
 const REVIEW_TIMEOUT = parsePositiveInt(REVIEW_TIMEOUT_MS, 120_000);
 const REVIEW_RETRIES = parsePositiveInt(REVIEW_MAX_RETRIES, 1);
-const MAX_BATCH_CHARS = parsePositiveInt(REVIEW_MAX_BATCH_CHARS, 25_000);
+// 单批字符数越小，单次 LLM 请求越快、越不容易超时。文件多时这是主要调节项。
+const MAX_BATCH_CHARS = parsePositiveInt(REVIEW_MAX_BATCH_CHARS, 12_000);
+// 并发跑多个 batch，避免文件多时串行累加导致整体耗时线性增长。
+const REVIEW_CONCURRENCY = parsePositiveInt(REVIEW_CONCURRENCY_ENV, 3);
 const LOG_RAW_RESPONSE = REVIEW_LOG_RAW_RESPONSE === '1' || REVIEW_LOG_RAW_RESPONSE === 'true';
 
 /**
@@ -206,7 +210,7 @@ console.log(`[llm-review] 环境：node=${process.version} repo=${REPO} pr=#${PR
 console.log(`[llm-review] commit：base=${shortSha(BASE_SHA)} head=${shortSha(HEAD_SHA)}`);
 console.log(
   `[llm-review] LLM 配置：baseURL=${safeUrl(REVIEW_BASE_URL)} model=${REVIEW_MODEL || 'gpt-4o-mini'} ` +
-    `timeout=${REVIEW_TIMEOUT}ms retries=${REVIEW_RETRIES} maxBatchChars=${MAX_BATCH_CHARS}`,
+    `timeout=${REVIEW_TIMEOUT}ms retries=${REVIEW_RETRIES} maxBatchChars=${MAX_BATCH_CHARS} concurrency=${REVIEW_CONCURRENCY}`,
 );
 
 // ---- 取 diff ----
@@ -304,20 +308,29 @@ const failedBatches = [];
 try {
   const client = await createOpenAIClient();
   const batches = makeBatches(files);
-  console.log(`[llm-review] LLM 分批：batches=${batches.length}`);
+  console.log(`[llm-review] LLM 分批：batches=${batches.length} concurrency=${REVIEW_CONCURRENCY}`);
 
-  for (const [index, batchFiles] of batches.entries()) {
-    const batchNumber = index + 1;
-    try {
-      const batchIssues = await reviewBatch(client, batchFiles, batchNumber, batches.length);
-      console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 返回 ${batchIssues.length} 个问题`);
-      issues.push(...batchIssues);
-    } catch (e) {
-      const message = describeError(e);
-      failedBatches.push({ batch: batchNumber, files: batchFiles.map((file) => file.path), message });
-      console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 失败：${message}`);
+  // 用固定大小的 worker 池并发跑各 batch，避免文件多时串行累加耗时。
+  let cursor = 0;
+  async function worker() {
+    while (cursor < batches.length) {
+      const index = cursor++;
+      const batchNumber = index + 1;
+      const batchFiles = batches[index];
+      try {
+        const batchIssues = await reviewBatch(client, batchFiles, batchNumber, batches.length);
+        console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 返回 ${batchIssues.length} 个问题`);
+        issues.push(...batchIssues);
+      } catch (e) {
+        const message = describeError(e);
+        failedBatches.push({ batch: batchNumber, files: batchFiles.map((file) => file.path), message });
+        console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 失败：${message}`);
+      }
     }
   }
+
+  const workerCount = Math.min(REVIEW_CONCURRENCY, batches.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   if (issues.length === 0 && failedBatches.length === batches.length) {
     skip(`所有 LLM batch 均失败，首个错误：${failedBatches[0]?.message ?? 'unknown'}`);

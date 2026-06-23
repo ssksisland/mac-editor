@@ -30,11 +30,12 @@ PR 打开/更新时，自动用 LLM 审查本次改动的 diff，把发现的潜
 |----------|------|--------|
 | `REVIEW_TIMEOUT_MS` | LLM 请求超时时间，毫秒 | `120000` |
 | `REVIEW_MAX_RETRIES` | LLM SDK 请求重试次数 | `1` |
-| `REVIEW_MAX_BATCH_CHARS` | 单个 LLM 请求最多包含的 diff 字符数，超出会拆成多批 | `25000` |
+| `REVIEW_MAX_BATCH_CHARS` | 单个 LLM 请求最多包含的 diff 字符数，超出会拆成多批 | `12000` |
+| `REVIEW_CONCURRENCY` | 同时并发的 LLM 请求数（batch 越多越省时间） | `3` |
 | `REVIEW_LOG_RAW_RESPONSE` | 设为 `true` 或 `1` 时打印模型原始响应前 2000 字符 | 关闭 |
 
 脚本默认会打印端点、模型、diff 规模、过滤统计、请求耗时、错误类型、状态码和 request id；不会打印 `REVIEW_API_KEY`。
-如果日志里 `userChars` 很大并超时，优先降低 `REVIEW_MAX_BATCH_CHARS`，例如设为 `15000`。
+如果日志里 `userChars` 很大并超时（`message=Request timed out.`），优先降低 `REVIEW_MAX_BATCH_CHARS`（如 `8000`），让单次请求更小更快；文件很多导致整体偏慢时，再调高 `REVIEW_CONCURRENCY`。
 
 ## ⚠️ 隐私提示
 

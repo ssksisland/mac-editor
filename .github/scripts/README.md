@@ -28,7 +28,7 @@ PR 打开/更新时，自动用 LLM 审查本次改动的 diff，把发现的潜
 
 | Variable | 说明 | 默认值 |
 |----------|------|--------|
-| `REVIEW_TIMEOUT_MS` | LLM 请求超时时间，毫秒 | `120000` |
+| `REVIEW_TIMEOUT_MS` | LLM 请求超时时间，毫秒 | `600000` |
 | `REVIEW_MAX_RETRIES` | LLM SDK 请求重试次数 | `1` |
 | `REVIEW_MAX_BATCH_CHARS` | 单个 LLM 请求最多包含的 diff 字符数，超出会拆成多批 | `12000` |
 | `REVIEW_CONCURRENCY` | 同时并发的 LLM 请求数（batch 越多越省时间） | `3` |

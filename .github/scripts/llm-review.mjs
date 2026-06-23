@@ -112,7 +112,7 @@ const SKIP_PATTERNS = [
 ];
 const MAX_FILE_PATCH = 30_000;   // 单文件 patch 超此字节截断
 const MAX_TOTAL = 120_000;       // 总 diff 超此字节停止收集
-const REVIEW_TIMEOUT = parsePositiveInt(REVIEW_TIMEOUT_MS, 120_000);
+const REVIEW_TIMEOUT = parsePositiveInt(REVIEW_TIMEOUT_MS, 600_000);
 const REVIEW_RETRIES = parsePositiveInt(REVIEW_MAX_RETRIES, 1);
 // 单批字符数越小，单次 LLM 请求越快、越不容易超时。文件多时这是主要调节项。
 const MAX_BATCH_CHARS = parsePositiveInt(REVIEW_MAX_BATCH_CHARS, 12_000);

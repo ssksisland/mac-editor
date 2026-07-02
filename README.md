@@ -17,7 +17,7 @@
 - **关闭保存确认** — 关闭 tab 或窗口时逐个询问是否保存（Excel 风格）
 - **文件拖放打开** — 从 Finder 拖入文件直接打开
 - **Finder 打开方式** — 在 Finder 中用 mac-editor 打开任意文件
-- **Todo List** — 固定 Todo 标签页，支持新建、编辑、完成、删除及创建/完成时间记录，本地 JSON 持久化
+- **Todo List** — 固定 Todo 标签页，支持新建、编辑、完成、删除、按创建日期分组及创建/完成时间记录，本地 JSON 持久化
 
 ## 安装
 
@@ -72,4 +72,4 @@ Todo 数据保存在 Tauri 应用数据目录的 `todos.json` 中。macOS 默认
 
 ## 版本
 
-当前版本：**v0.5.0** — 详见 [CHANGELOG.md](CHANGELOG.md)
+当前版本：**v1.1.0** — 详见 [CHANGELOG.md](CHANGELOG.md)

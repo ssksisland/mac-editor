@@ -4,10 +4,23 @@ All notable changes to mac-editor will be documented in this file.
 
 ## [Unreleased]
 
+## [v1.1.0] — 2026-07-02
+
+Todo List 正式版。新增固定 Todo 标签页与本地持久化，适合作为编辑器内置的轻量任务清单。
+
 ### Added
 - Todo List 固定标签页：支持新建、编辑、完成、删除、完成动画及创建/完成时间记录
 - Todo 数据保存到应用数据目录的版本化 JSON 文件，支持原子替换、备份恢复和 Demo `localStorage` 自动迁移
 - Todo 持久化 Rust 单元测试并接入 CI
+
+### Changed
+- 待办与已完成列表均按创建日期分组，组内按创建时间倒序排列
+- Todo 页面在隐藏编辑器时保留 CodeMirror 实例，切换页面不丢编辑器状态
+
+### Fixed
+- 修复中文输入法组合输入时按 Enter 可能误创建待办的问题
+- 修复 Todo 页面快捷键影响隐藏编辑器标签页的问题
+- 修复编辑待办时 Enter 与 blur 可能重复保存的问题
 
 ## [v1.0.0] — 2026-06-22
 

@@ -23,12 +23,14 @@ App.tsx (垂直布局)
 ├── MarkdownPreview — Markdown 实时预览（左右分屏，300ms debounce）
 ├── StatusBar     — 行列号 / 编码 / 语言（200ms 轮询）
 ├── SearchPanel   — 搜索+替换（正则/Case/转义序列/标记所有）
+├── TodoPage      — 固定 Todo 标签页，新建/编辑/完成/删除，按创建日期分组
 └── CloseSaveDialog — 关闭前保存询问（Excel 三按钮风格）
 ```
 
 ## 状态 & 通信
 
 - **Zustand store** (`stores/editorStore.ts`) — tabs[], activeTabId, settings, cursor position, recent files（localStorage 持久化）, moveTab
+- **Zustand store** (`stores/todoStore.ts`) — Todo 项列表与异步持久化，Tauri 下保存到应用数据目录 `todos.json`
 - **window.__macEditor** — 菜单栏按钮 → 编辑器实例的桥，绕过 React 树
   - `selectColumn()` — 所有行同列添加光标
   - `deduplicateLines()` — 按行去重（SQL DISTINCT）

@@ -257,6 +257,20 @@ body,
   border-radius: 10px;
 }
 
+.todo-day-group + .todo-day-group .todo-day-heading {
+  border-top: 1px solid #eef0f2;
+}
+
+.todo-day-heading {
+  padding: 8px 13px 7px 52px;
+  background: #fafbfc;
+  border-bottom: 1px solid #eef0f2;
+  color: #969aa1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
 .todo-empty {
   padding: 26px;
   color: #a2a5aa;

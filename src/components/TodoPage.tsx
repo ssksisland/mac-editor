@@ -26,6 +26,8 @@ export default function TodoPage() {
   // 用 ref 做防重判断才能保证 action 不被重复触发。
   const exitingRef = useRef<Set<string>>(new Set());
   const cancelEditRef = useRef(false);
+  // 防止 Enter（onKeyDown）+ 卸载（onBlur）对同一次编辑重复调用 finishEdit。
+  const finishingRef = useRef(false);
 
   useEffect(() => {
     void initialize();
@@ -43,6 +45,8 @@ export default function TodoPage() {
   const completed = todos
     .filter((todo) => todo.status === 'completed')
     .sort((a, b) => b.createdAt - a.createdAt || (b.completedAt ?? 0) - (a.completedAt ?? 0));
+  const pendingGroups = groupTodosByDay(pending, (todo) => todo.createdAt);
+  const completedGroups = groupTodosByDay(completed, (todo) => todo.createdAt);
 
   const createTodo = () => {
     const content = draft.trim();
@@ -53,6 +57,7 @@ export default function TodoPage() {
 
   const startEdit = (todo: TodoItem) => {
     cancelEditRef.current = false;
+    finishingRef.current = false;
     setEditingId(todo.id);
     setEditDraft(todo.content);
   };
@@ -62,6 +67,10 @@ export default function TodoPage() {
       cancelEditRef.current = false;
       return;
     }
+    // Enter 会先调 finishEdit，再因 input 卸载触发 onBlur 二次调用；
+    // 用一次性闸门确保 updateTodo 只执行一次。
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     const content = editDraft.trim();
     if (editingId && content) updateTodo(editingId, content);
     setEditingId(null);
@@ -145,20 +154,24 @@ export default function TodoPage() {
             </div>
 
             <TodoSection title="待办" count={pending.length} empty="暂无待办事项">
-              {pending.map((todo) => (
-                <TodoRow
-                  key={todo.id}
-                  todo={todo}
-                  exiting={exitingIds.has(todo.id)}
-                  editing={editingId === todo.id}
-                  editDraft={editDraft}
-                  onEditDraft={setEditDraft}
-                  onStartEdit={() => startEdit(todo)}
-                  onFinishEdit={finishEdit}
-                  onCancelEdit={cancelEdit}
-                  onComplete={() => animateThen(todo.id, () => completeTodo(todo.id))}
-                  onDelete={() => removeTodo(todo)}
-                />
+              {pendingGroups.map((group) => (
+                <TodoDayGroup key={group.key} label={group.label}>
+                  {group.todos.map((todo) => (
+                    <TodoRow
+                      key={todo.id}
+                      todo={todo}
+                      exiting={exitingIds.has(todo.id)}
+                      editing={editingId === todo.id}
+                      editDraft={editDraft}
+                      onEditDraft={setEditDraft}
+                      onStartEdit={() => startEdit(todo)}
+                      onFinishEdit={finishEdit}
+                      onCancelEdit={cancelEdit}
+                      onComplete={() => animateThen(todo.id, () => completeTodo(todo.id))}
+                      onDelete={() => removeTodo(todo)}
+                    />
+                  ))}
+                </TodoDayGroup>
               ))}
             </TodoSection>
 
@@ -170,20 +183,24 @@ export default function TodoPage() {
               open={completedOpen}
               onToggle={() => setCompletedOpen((open) => !open)}
             >
-              {completed.map((todo) => (
-                <TodoRow
-                  key={todo.id}
-                  todo={todo}
-                  exiting={exitingIds.has(todo.id)}
-                  editing={false}
-                  editDraft=""
-                  onEditDraft={() => undefined}
-                  onStartEdit={() => undefined}
-                  onFinishEdit={() => undefined}
-                  onCancelEdit={() => undefined}
-                  onComplete={() => undefined}
-                  onDelete={() => removeTodo(todo)}
-                />
+              {completedGroups.map((group) => (
+                <TodoDayGroup key={group.key} label={group.label}>
+                  {group.todos.map((todo) => (
+                    <TodoRow
+                      key={todo.id}
+                      todo={todo}
+                      exiting={exitingIds.has(todo.id)}
+                      editing={false}
+                      editDraft=""
+                      onEditDraft={() => undefined}
+                      onStartEdit={() => undefined}
+                      onFinishEdit={() => undefined}
+                      onCancelEdit={() => undefined}
+                      onComplete={() => undefined}
+                      onDelete={() => removeTodo(todo)}
+                    />
+                  ))}
+                </TodoDayGroup>
               ))}
             </TodoSection>
           </>
@@ -234,6 +251,21 @@ function TodoSection({
         </div>
       )}
     </section>
+  );
+}
+
+function TodoDayGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="todo-day-group">
+      <div className="todo-day-heading">{label}</div>
+      {children}
+    </div>
   );
 }
 
@@ -311,6 +343,42 @@ function formatTime(value: number) {
   const date = new Date(value);
   const two = (part: number) => String(part).padStart(2, '0');
   return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())} ${two(date.getHours())}:${two(date.getMinutes())}`;
+}
+
+function formatDayLabel(value: number) {
+  const date = new Date(value);
+  const today = startOfLocalDay(Date.now());
+  const day = startOfLocalDay(value);
+  const offset = Math.round((today - day) / 86_400_000);
+  const month = date.getMonth() + 1;
+  const dateOfMonth = date.getDate();
+  const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
+
+  if (offset === 0) return `今天 · ${month}月${dateOfMonth}日 ${weekDay}`;
+  if (offset === 1) return `昨天 · ${month}月${dateOfMonth}日 ${weekDay}`;
+  return `${date.getFullYear()}年${month}月${dateOfMonth}日 ${weekDay}`;
+}
+
+function startOfLocalDay(value: number) {
+  const date = new Date(value);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+}
+
+function groupTodosByDay(todos: TodoItem[], getTime: (todo: TodoItem) => number) {
+  const groups: Array<{ key: string; label: string; todos: TodoItem[] }> = [];
+
+  for (const todo of todos) {
+    const time = getTime(todo);
+    const key = new Date(startOfLocalDay(time)).toISOString();
+    const last = groups[groups.length - 1];
+    if (last?.key === key) {
+      last.todos.push(todo);
+    } else {
+      groups.push({ key, label: formatDayLabel(time), todos: [todo] });
+    }
+  }
+
+  return groups;
 }
 
 /** WebKit may report keyCode 229 even when isComposing changes before Enter bubbles. */

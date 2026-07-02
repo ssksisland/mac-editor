@@ -22,6 +22,8 @@ const {
   REVIEW_TIMEOUT_MS,
   REVIEW_MAX_RETRIES,
   REVIEW_MAX_BATCH_CHARS,
+  REVIEW_BATCH_RETRIES,
+  REVIEW_RETRY_BASE_DELAY_MS,
   REVIEW_CONCURRENCY: REVIEW_CONCURRENCY_ENV,
   REVIEW_LOG_RAW_RESPONSE,
   GITHUB_TOKEN,
@@ -60,6 +62,10 @@ function safeUrl(value) {
 
 function elapsedMs(startedAt) {
   return `${Date.now() - startedAt}ms`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function describeError(error) {
@@ -114,10 +120,13 @@ const MAX_FILE_PATCH = 30_000;   // 单文件 patch 超此字节截断
 const MAX_TOTAL = 120_000;       // 总 diff 超此字节停止收集
 const REVIEW_TIMEOUT = parsePositiveInt(REVIEW_TIMEOUT_MS, 600_000);
 const REVIEW_RETRIES = parsePositiveInt(REVIEW_MAX_RETRIES, 1);
+// SDK 内置重试不一定覆盖响应体读取中断（如 ERR_STREAM_PREMATURE_CLOSE），这里再做 batch 级重试。
+const BATCH_RETRIES = parsePositiveInt(REVIEW_BATCH_RETRIES, 2);
+const RETRY_BASE_DELAY = parsePositiveInt(REVIEW_RETRY_BASE_DELAY_MS, 1_500);
 // 单批字符数越小，单次 LLM 请求越快、越不容易超时。文件多时这是主要调节项。
 const MAX_BATCH_CHARS = parsePositiveInt(REVIEW_MAX_BATCH_CHARS, 12_000);
-// 并发跑多个 batch，避免文件多时串行累加导致整体耗时线性增长。
-const REVIEW_CONCURRENCY = parsePositiveInt(REVIEW_CONCURRENCY_ENV, 3);
+// 默认串行，避免 OpenAI 兼容端点在并发请求下提前断开响应体。
+const REVIEW_CONCURRENCY = parsePositiveInt(REVIEW_CONCURRENCY_ENV, 1);
 const LOG_RAW_RESPONSE = REVIEW_LOG_RAW_RESPONSE === '1' || REVIEW_LOG_RAW_RESPONSE === 'true';
 
 /**
@@ -210,7 +219,8 @@ console.log(`[llm-review] 环境：node=${process.version} repo=${REPO} pr=#${PR
 console.log(`[llm-review] commit：base=${shortSha(BASE_SHA)} head=${shortSha(HEAD_SHA)}`);
 console.log(
   `[llm-review] LLM 配置：baseURL=${safeUrl(REVIEW_BASE_URL)} model=${REVIEW_MODEL || 'gpt-4o-mini'} ` +
-    `timeout=${REVIEW_TIMEOUT}ms retries=${REVIEW_RETRIES} maxBatchChars=${MAX_BATCH_CHARS} concurrency=${REVIEW_CONCURRENCY}`,
+    `timeout=${REVIEW_TIMEOUT}ms sdkRetries=${REVIEW_RETRIES} batchRetries=${BATCH_RETRIES} ` +
+    `retryBaseDelay=${RETRY_BASE_DELAY}ms maxBatchChars=${MAX_BATCH_CHARS} concurrency=${REVIEW_CONCURRENCY}`,
 );
 
 // ---- 取 diff ----
@@ -303,6 +313,30 @@ async function reviewBatch(client, batchFiles, batchIndex, batchCount) {
   return Array.isArray(parsed.issues) ? parsed.issues : [];
 }
 
+async function reviewBatchWithRetry(client, batchFiles, batchIndex, batchCount) {
+  let lastError;
+
+  for (let attempt = 1; attempt <= BATCH_RETRIES + 1; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`[llm-review] LLM batch ${batchIndex}/${batchCount} 重试：attempt=${attempt}/${BATCH_RETRIES + 1}`);
+      }
+      return await reviewBatch(client, batchFiles, batchIndex, batchCount);
+    } catch (e) {
+      lastError = e;
+      const message = describeError(e);
+      console.log(`[llm-review] LLM batch ${batchIndex}/${batchCount} attempt ${attempt}/${BATCH_RETRIES + 1} 失败：${message}`);
+      if (attempt <= BATCH_RETRIES) {
+        const delay = RETRY_BASE_DELAY * attempt;
+        console.log(`[llm-review] LLM batch ${batchIndex}/${batchCount} ${delay}ms 后重试`);
+        await sleep(delay);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 let issues = [];
 const failedBatches = [];
 try {
@@ -318,7 +352,7 @@ try {
       const batchNumber = index + 1;
       const batchFiles = batches[index];
       try {
-        const batchIssues = await reviewBatch(client, batchFiles, batchNumber, batches.length);
+        const batchIssues = await reviewBatchWithRetry(client, batchFiles, batchNumber, batches.length);
         console.log(`[llm-review] LLM batch ${batchNumber}/${batches.length} 返回 ${batchIssues.length} 个问题`);
         issues.push(...batchIssues);
       } catch (e) {

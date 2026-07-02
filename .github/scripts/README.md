@@ -31,11 +31,13 @@ PR 打开/更新时，自动用 LLM 审查本次改动的 diff，把发现的潜
 | `REVIEW_TIMEOUT_MS` | LLM 请求超时时间，毫秒 | `600000` |
 | `REVIEW_MAX_RETRIES` | LLM SDK 请求重试次数 | `1` |
 | `REVIEW_MAX_BATCH_CHARS` | 单个 LLM 请求最多包含的 diff 字符数，超出会拆成多批 | `12000` |
-| `REVIEW_CONCURRENCY` | 同时并发的 LLM 请求数（batch 越多越省时间） | `3` |
+| `REVIEW_BATCH_RETRIES` | 单个 batch 失败后的额外重试次数，用于处理 `ERR_STREAM_PREMATURE_CLOSE` 等响应中断 | `2` |
+| `REVIEW_RETRY_BASE_DELAY_MS` | batch 重试基础等待时间，第 N 次重试等待 `N * baseDelay` | `1500` |
+| `REVIEW_CONCURRENCY` | 同时并发的 LLM 请求数；端点不稳定时保持 `1` 更稳 | `1` |
 | `REVIEW_LOG_RAW_RESPONSE` | 设为 `true` 或 `1` 时打印模型原始响应前 2000 字符 | 关闭 |
 
 脚本默认会打印端点、模型、diff 规模、过滤统计、请求耗时、错误类型、状态码和 request id；不会打印 `REVIEW_API_KEY`。
-如果日志里 `userChars` 很大并超时（`message=Request timed out.`），优先降低 `REVIEW_MAX_BATCH_CHARS`（如 `8000`），让单次请求更小更快；文件很多导致整体偏慢时，再调高 `REVIEW_CONCURRENCY`。
+如果日志里 `userChars` 很大并超时（`message=Request timed out.`），优先降低 `REVIEW_MAX_BATCH_CHARS`（如 `8000`），让单次请求更小更快。出现 `ERR_STREAM_PREMATURE_CLOSE` 时，通常是端点提前断开响应体，保持 `REVIEW_CONCURRENCY=1` 并调高 `REVIEW_BATCH_RETRIES` 更稳。
 
 ## ⚠️ 隐私提示
 

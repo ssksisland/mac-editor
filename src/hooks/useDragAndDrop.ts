@@ -11,6 +11,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
+import { errorMessage, notify } from '../utils/notifications';
 
 interface FileReadResult {
   content: string;
@@ -54,6 +55,7 @@ export function useDragAndDrop() {
           useEditorStore.getState().addRecentFile(filePath, fileName);
         } catch (error) {
           console.error('[open] Failed to read file:', error);
+          notify(`无法打开拖入的文件：${errorMessage(error)}`, 'error');
         }
       }
     };
@@ -69,7 +71,10 @@ export function useDragAndDrop() {
     if (isTauri()) {
       invoke<string[]>('take_pending_files')
         .then((paths) => { if (paths.length > 0) openPaths(paths); })
-        .catch((e) => console.error('[open] take_pending_files failed:', e));
+        .catch((e) => {
+          console.error('[open] take_pending_files failed:', e);
+          notify(`无法接收 Finder 打开的文件：${errorMessage(e)}`, 'error');
+        });
     }
 
     return () => {
@@ -141,6 +146,7 @@ export function useDragAndDrop() {
           });
         } catch (error) {
           console.error('[drop] Failed to read dropped file:', error);
+          notify(`无法读取 ${file.name}：${errorMessage(error)}`, 'error');
         }
       }
     },

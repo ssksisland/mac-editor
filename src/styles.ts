@@ -6,22 +6,22 @@
  */
 export const colors = {
   background: '#fff',
-  surface: '#fafafa',
-  surfaceAlt: '#f5f5f5',
-  border: '#ddd',
-  borderLight: '#e0e0e0',
-  text: '#333',
-  textSecondary: '#999',
-  textTertiary: '#666',
-  accent: '#007aff',
+  surface: '#f8f9fb',
+  surfaceAlt: '#eef1f5',
+  border: '#d9dde5',
+  borderLight: '#e3e6eb',
+  text: '#1f2328',
+  textSecondary: '#7b8492',
+  textTertiary: '#5c6470',
+  accent: '#2878f0',
   accentLight: '#34c759',
   accentWarning: '#ff9500',
   accentSelected: '#ffd60a',
 };
 
 export const sizes = {
-  menuBarHeight: 32,
-  tabBarHeight: 38,
+  menuBarHeight: 42,
+  tabBarHeight: 40,
   statusBarHeight: 24,
   borderRadius: 6,
   padding: 12,
@@ -34,9 +34,7 @@ export const flexCenter: React.CSSProperties = {
 };
 
 export const menuButton: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: '6px 12px',
+  padding: '6px 9px',
   cursor: 'pointer',
   fontSize: '13px',
   color: colors.text,

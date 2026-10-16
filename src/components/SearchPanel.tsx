@@ -50,6 +50,14 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     setTimeout(() => searchInputRef.current?.focus(), 100);
   }, []);
 
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   /* Build regex safely. */
   const buildRegex = useCallback((): RegExp | null => {
     if (!searchTerm) return null;
@@ -222,6 +230,9 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
     }
   };
 
+  const invalidRegex = Boolean(searchTerm && useRegex && !buildRegex());
+  const searchActionsDisabled = !searchTerm || invalidRegex;
+
   /* Cleanup highlights on unmount. */
   useEffect(() => {
     return () => {
@@ -230,10 +241,10 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
   }, [activeTab]);
 
   return (
-    <div style={panelStyle({ top: 70, right: 20, width: 340 })}>
+    <div role="dialog" aria-modal="false" aria-label="查找与替换" style={panelStyle({ top: 86, right: 20, width: 340 })}>
       <div style={styles.header}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>搜索和替换</h3>
-        <button onClick={onClose} style={styles.closeBtn}>×</button>
+        <button onClick={onClose} style={styles.closeBtn} aria-label="关闭查找面板">×</button>
       </div>
 
       {/* Search row */}
@@ -246,9 +257,10 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
           onChange={(e) => setSearchTerm(e.target.value)}
           onKeyDown={handleKeyDown}
           style={styles.input}
+          aria-invalid={invalidRegex}
         />
-        <button onClick={findPrev} style={styles.navBtn} title="上一个 (Shift+Enter)">↑</button>
-        <button onClick={findNext} style={styles.navBtn} title="下一个 (Enter)">↓</button>
+        <button disabled={searchActionsDisabled} onClick={findPrev} style={buttonStyle(styles.navBtn, searchActionsDisabled)} title="上一个 (Shift+Enter)" aria-label="上一个匹配">↑</button>
+        <button disabled={searchActionsDisabled} onClick={findNext} style={buttonStyle(styles.navBtn, searchActionsDisabled)} title="下一个 (Enter)" aria-label="下一个匹配">↓</button>
       </div>
 
       {/* Replace row */}
@@ -260,13 +272,17 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
           onChange={(e) => setReplaceTerm(e.target.value)}
           style={styles.input}
         />
-        <button onClick={handleReplace} style={styles.primaryBtn}>替换</button>
+        <button disabled={searchActionsDisabled} onClick={handleReplace} style={buttonStyle(styles.primaryBtn, searchActionsDisabled)}>替换</button>
       </div>
 
       {/* Match count */}
       {searchTerm && (
-        <div style={styles.matchCount}>
-          {matchCount > 0 ? `找到 ${matchCount} 个匹配项` : '无匹配项'}
+        <div style={{ ...styles.matchCount, color: invalidRegex ? '#c53a3a' : colors.textTertiary }} role={invalidRegex ? 'alert' : undefined}>
+          {invalidRegex
+            ? '正则表达式无效'
+            : matchCount > 0
+              ? `找到 ${matchCount} 个匹配项`
+              : '无匹配项'}
         </div>
       )}
 
@@ -286,20 +302,32 @@ export default function SearchPanel({ onClose }: SearchPanelProps) {
       <div style={styles.row}>
         <button
           onClick={handleMark}
+          disabled={searchActionsDisabled && !isMarked}
           style={{
             ...styles.actionBtn,
-            borderColor: isMarked ? colors.accentLight : colors.accentWarning,
-            background: isMarked ? colors.accentLight : colors.accentWarning,
+            borderColor: isMarked ? '#72b58a' : colors.border,
+            background: isMarked ? '#e8f7ed' : colors.background,
+            color: isMarked ? '#238648' : colors.textTertiary,
+            opacity: searchActionsDisabled && !isMarked ? 0.42 : 1,
+            cursor: searchActionsDisabled && !isMarked ? 'default' : 'pointer',
           }}
         >
           {isMarked ? '清除标记' : '标记所有'}
         </button>
-        <button onClick={handleReplaceAll} style={{ ...styles.actionBtn, flex: 1, background: colors.accent, borderColor: colors.accent }}>
+        <button disabled={searchActionsDisabled} onClick={handleReplaceAll} style={buttonStyle({ ...styles.actionBtn, flex: 1, background: colors.accent, borderColor: colors.accent }, searchActionsDisabled)}>
           全部替换
         </button>
       </div>
     </div>
   );
+}
+
+function buttonStyle(style: React.CSSProperties, disabled: boolean): React.CSSProperties {
+  return {
+    ...style,
+    opacity: disabled ? 0.42 : 1,
+    cursor: disabled ? 'default' : 'pointer',
+  };
 }
 
 /* --- Styles --- */
@@ -308,11 +336,11 @@ const styles: Record<string, React.CSSProperties> = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   closeBtn: { background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: '#999', padding: '0 4px' },
   row: { display: 'flex', gap: 6, marginBottom: 8 },
-  input: { flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13, outline: 'none' },
+  input: { flex: 1, minWidth: 0, padding: '8px 10px', border: `1px solid ${colors.border}`, borderRadius: 7, fontSize: 13 },
   navBtn: { padding: '6px 12px', border: '1px solid #ddd', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 14 },
   primaryBtn: { padding: '6px 12px', border: `1px solid ${colors.accent}`, borderRadius: 6, background: colors.accent, color: '#fff', cursor: 'pointer', fontSize: 12 },
-  matchCount: { marginBottom: 10, fontSize: 12, color: '#666' },
+  matchCount: { margin: '-1px 0 9px', minHeight: 18, fontSize: 11 },
   options: { display: 'flex', gap: 16, marginBottom: 10 },
   checkbox: { fontSize: 12, cursor: 'pointer' },
-  actionBtn: { padding: '8px 16px', border: `1px solid ${colors.accent}`, borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: 12 },
+  actionBtn: { padding: '8px 16px', border: `1px solid ${colors.accent}`, borderRadius: 7, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 550 },
 };

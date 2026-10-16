@@ -92,8 +92,16 @@ export function useKeyboardShortcuts() {
       // Cmd/Ctrl + F: Search / Find
       if (mod && key === 'f') {
         e.preventDefault();
-        if (activePage === 'todo') return;
+        if (activePage === 'todo' || !activeTabId) return;
         window.dispatchEvent(new CustomEvent('mac-editor:open-search'));
+        return;
+      }
+
+      // Cmd/Ctrl + G: Go to line
+      if (mod && key === 'g') {
+        e.preventDefault();
+        if (activePage === 'todo' || !activeTabId) return;
+        window.dispatchEvent(new CustomEvent('mac-editor:open-goto-line'));
         return;
       }
 

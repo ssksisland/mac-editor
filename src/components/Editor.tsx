@@ -8,8 +8,8 @@
  * 4. 将文档变更和光标位置同步回 Zustand store
  * 5. 字体/字号/换行等样式变更通过直接操作 DOM 实现（避免重建编辑器）
  */
-import { useEffect, useRef, useCallback } from 'react';
-import { EditorState, EditorSelection, SelectionRange } from '@codemirror/state';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { EditorState, EditorSelection, SelectionRange, type Extension } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -37,93 +37,93 @@ import {
 } from '@codemirror/language';
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { StreamLanguage } from '@codemirror/language';
-import { javascript } from '@codemirror/lang-javascript';
-import { python } from '@codemirror/lang-python';
-import { html } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { json } from '@codemirror/lang-json';
-import { markdown } from '@codemirror/lang-markdown';
-import { cpp } from '@codemirror/lang-cpp';
-import { java } from '@codemirror/lang-java';
-import { php } from '@codemirror/lang-php';
-import { rust } from '@codemirror/lang-rust';
-import { sql } from '@codemirror/lang-sql';
-import { xml } from '@codemirror/lang-xml';
-import { shell as shellMode } from '@codemirror/legacy-modes/mode/shell';
-import { go as goMode } from '@codemirror/legacy-modes/mode/go';
-import { ruby as rubyMode } from '@codemirror/legacy-modes/mode/ruby';
-import { perl as perlMode } from '@codemirror/legacy-modes/mode/perl';
-import { yaml as yamlMode } from '@codemirror/legacy-modes/mode/yaml';
-import { dockerFile as dockerFileMode } from '@codemirror/legacy-modes/mode/dockerfile';
-import { swift as swiftMode } from '@codemirror/legacy-modes/mode/swift';
-import { clike as csharpMode } from '@codemirror/legacy-modes/mode/clike';
-import { clike as clikeMode } from '@codemirror/legacy-modes/mode/clike';
-import { r as rMode } from '@codemirror/legacy-modes/mode/r';
-import { lua as luaMode } from '@codemirror/legacy-modes/mode/lua';
-import { toml as tomlMode } from '@codemirror/legacy-modes/mode/toml';
-import { nginx as nginxMode } from '@codemirror/legacy-modes/mode/nginx';
 import { xcodeLight } from '@uiw/codemirror-theme-xcode';
 import { useEditorStore } from '../stores/editorStore';
 import { highlightField } from '../searchHighlight';
 import { invisibleChars, toggleInvisible } from './invisibleChars';
 import { lineBookmark, toggleBookmarkEffect } from '../lineBookmark';
+import { errorMessage, notify } from '../utils/notifications';
 
 /* ==================== 语言扩展注册表 ====================
  *
- * 映射语言标识 → CodeMirror 语言扩展函数。
- * 较新的语言使用 @codemirror/lang-* 包（Tree-sitter 解析，性能更好），
+ * 按当前文件类型动态加载 CodeMirror 语言扩展，避免把全部语言解析器
+ * 打进首屏包。较新的语言使用 @codemirror/lang-* 包（解析性能更好），
  * 没有原生 v6 包的使用 StreamLanguage + 旧版 mode 兼容。
  */
 
-const langExt: Record<string, () => any> = {
-  javascript: () => javascript({ typescript: true, jsx: true }),
-  typescript: () => javascript({ typescript: true, jsx: true }),
-  python,
-  html,
-  css,
-  json,
-  markdown,
-  cpp,
-  c: cpp,
-  h: cpp,
-  hpp: cpp,
-  java,
-  php,
-  rust,
-  sql,
-  xml,
-  shell: () => StreamLanguage.define(shellMode as any),
-  bash: () => StreamLanguage.define(shellMode as any),
-  sh: () => StreamLanguage.define(shellMode as any),
-  zsh: () => StreamLanguage.define(shellMode as any),
-  go: () => StreamLanguage.define(goMode as any),
-  ruby: () => StreamLanguage.define(rubyMode as any),
-  rb: () => StreamLanguage.define(rubyMode as any),
-  perl: () => StreamLanguage.define(perlMode as any),
-  pl: () => StreamLanguage.define(perlMode as any),
-  pm: () => StreamLanguage.define(perlMode as any),
-  yaml: () => StreamLanguage.define(yamlMode as any),
-  yml: () => StreamLanguage.define(yamlMode as any),
-  dockerfile: () => StreamLanguage.define(dockerFileMode as any),
-  swift: () => StreamLanguage.define(swiftMode as any),
-  kotlin: () => StreamLanguage.define(clikeMode as any),
-  kt: () => StreamLanguage.define(clikeMode as any),
-  csharp: () => StreamLanguage.define(csharpMode as any),
-  cs: () => StreamLanguage.define(csharpMode as any),
-  dart: () => StreamLanguage.define(clikeMode as any),
-  r: () => StreamLanguage.define(rMode as any),
-  lua: () => StreamLanguage.define(luaMode as any),
-  toml: () => StreamLanguage.define(tomlMode as any),
-  conf: () => StreamLanguage.define(tomlMode as any),
-  ini: () => StreamLanguage.define(tomlMode as any),
-  nginx: () => StreamLanguage.define(nginxMode as any),
-  txt: () => [],
-};
+const NO_LANGUAGE: Extension = [];
 
-/** 根据语言标识获取对应的语言扩展，未识别则返回空数组 */
-function getLangExt(language: string) {
-  const fn = langExt[language.toLowerCase()];
-  return fn ? fn() : [];
+async function loadLanguageExtension(language: string): Promise<Extension> {
+  const normalized = language.toLowerCase();
+
+  if (normalized === 'javascript' || normalized === 'typescript') {
+    const { javascript } = await import('@codemirror/lang-javascript');
+    return javascript({ typescript: normalized === 'typescript', jsx: true });
+  }
+  if (normalized === 'python') return (await import('@codemirror/lang-python')).python();
+  if (normalized === 'html') return (await import('@codemirror/lang-html')).html();
+  if (normalized === 'css') return (await import('@codemirror/lang-css')).css();
+  if (normalized === 'json') return (await import('@codemirror/lang-json')).json();
+  if (normalized === 'markdown') return (await import('@codemirror/lang-markdown')).markdown();
+  if (['c', 'cpp', 'h', 'hpp'].includes(normalized)) {
+    return (await import('@codemirror/lang-cpp')).cpp();
+  }
+  if (normalized === 'java') return (await import('@codemirror/lang-java')).java();
+  if (normalized === 'php') return (await import('@codemirror/lang-php')).php();
+  if (normalized === 'rust') return (await import('@codemirror/lang-rust')).rust();
+  if (normalized === 'sql') return (await import('@codemirror/lang-sql')).sql();
+  if (normalized === 'xml') return (await import('@codemirror/lang-xml')).xml();
+
+  if (['shell', 'bash', 'sh', 'zsh'].includes(normalized)) {
+    const { shell } = await import('@codemirror/legacy-modes/mode/shell');
+    return StreamLanguage.define(shell as any);
+  }
+  if (normalized === 'go') {
+    const { go } = await import('@codemirror/legacy-modes/mode/go');
+    return StreamLanguage.define(go as any);
+  }
+  if (['ruby', 'rb'].includes(normalized)) {
+    const { ruby } = await import('@codemirror/legacy-modes/mode/ruby');
+    return StreamLanguage.define(ruby as any);
+  }
+  if (['perl', 'pl', 'pm'].includes(normalized)) {
+    const { perl } = await import('@codemirror/legacy-modes/mode/perl');
+    return StreamLanguage.define(perl as any);
+  }
+  if (['yaml', 'yml'].includes(normalized)) {
+    const { yaml } = await import('@codemirror/legacy-modes/mode/yaml');
+    return StreamLanguage.define(yaml as any);
+  }
+  if (normalized === 'dockerfile') {
+    const { dockerFile } = await import('@codemirror/legacy-modes/mode/dockerfile');
+    return StreamLanguage.define(dockerFile as any);
+  }
+  if (normalized === 'swift') {
+    const { swift } = await import('@codemirror/legacy-modes/mode/swift');
+    return StreamLanguage.define(swift as any);
+  }
+  if (['kotlin', 'kt', 'csharp', 'cs', 'dart'].includes(normalized)) {
+    const { clike } = await import('@codemirror/legacy-modes/mode/clike');
+    return StreamLanguage.define(clike as any);
+  }
+  if (normalized === 'r') {
+    const { r } = await import('@codemirror/legacy-modes/mode/r');
+    return StreamLanguage.define(r as any);
+  }
+  if (normalized === 'lua') {
+    const { lua } = await import('@codemirror/legacy-modes/mode/lua');
+    return StreamLanguage.define(lua as any);
+  }
+  if (['toml', 'conf', 'ini'].includes(normalized)) {
+    const { toml } = await import('@codemirror/legacy-modes/mode/toml');
+    return StreamLanguage.define(toml as any);
+  }
+  if (normalized === 'nginx') {
+    const { nginx } = await import('@codemirror/legacy-modes/mode/nginx');
+    return StreamLanguage.define(nginx as any);
+  }
+
+  return NO_LANGUAGE;
 }
 
 /* ==================== 列选择 ====================
@@ -289,12 +289,30 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
   const initialContentRef = useRef(initialContent);
   // 活跃状态 ref（在闭包中获取最新值，避免依赖项变化）
   const isActiveRef = useRef(isActive);
+  const [languageExtension, setLanguageExtension] = useState<Extension>(NO_LANGUAGE);
 
   // 从 store 订阅编辑器设置
   const fontSize = useEditorStore((s) => s.settings.fontSize);
   const fontFamily = useEditorStore((s) => s.settings.fontFamily);
   const wordWrap = useEditorStore((s) => s.settings.wordWrap);
   const showInvisibleChars = useEditorStore((s) => s.settings.showInvisibleChars);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadLanguageExtension(language).then(
+      (extension) => {
+        if (!cancelled) setLanguageExtension(extension);
+      },
+      (error) => {
+        console.error(`[language] Failed to load ${language}:`, error);
+        if (!cancelled) {
+          setLanguageExtension(NO_LANGUAGE);
+          notify(`无法加载 ${language} 语法高亮：${errorMessage(error)}`, 'error');
+        }
+      },
+    );
+    return () => { cancelled = true; };
+  }, [language]);
 
   /**
    * 构建 CodeMirror 扩展数组。
@@ -467,14 +485,14 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       xcodeLight,  // Xcode 风格主题
       highlightField,  // 搜索匹配高亮
       wordWrap ? EditorView.lineWrapping : [],  // 自动换行
-      getLangExt(language),  // 语法高亮扩展
+      languageExtension,  // 按文件类型动态加载的语法高亮扩展
       invisibleChars(),  // 不可见字符显示
     ];
-  }, [language, fontSize, fontFamily, wordWrap, tabId]);
+  }, [languageExtension, fontSize, fontFamily, wordWrap, tabId]);
 
   /**
    * 创建 CodeMirror 编辑器实例。
-   * 仅在 language 变化时重建（因为语言扩展不可变）。
+   * 仅在异步语言扩展加载完成后重建（因为语言扩展不可变）。
    * 字体/字号/换行通过另一个 effect 直接操作 DOM，避免频繁重建。
    */
   useEffect(() => {
@@ -557,7 +575,7 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]);
+  }, [languageExtension]);
 
   // 不可见字符开关 — 通过 effect 切换，不重建编辑器
   useEffect(() => {

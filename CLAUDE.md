@@ -14,7 +14,7 @@ npm run build        # 生产构建
 
 ```
 App.tsx (垂直布局)
-├── MenuBar       — 新建/打开/保存、语言切换、列选择、按行去重、Markdown 预览
+├── MenuBar       — 新建/打开/保存、查找/跳转、语言切换、列选择、按行去重、Markdown 预览
 ├── TabBar        — 多 tab 标签页，拖拽排序，双击重命名，双击空白新建
 ├── Editor        — CodeMirror 6 封装，一个 tab 一个实例
 │   ├── searchHighlight.ts  — 搜索匹配高亮（StateEffect + StateField）
@@ -24,7 +24,8 @@ App.tsx (垂直布局)
 ├── StatusBar     — 行列号 / 编码 / 语言（200ms 轮询）
 ├── SearchPanel   — 搜索+替换（正则/Case/转义序列/标记所有）
 ├── TodoPage      — 固定 Todo 标签页，新建/编辑/完成/删除，按创建日期分组
-└── CloseSaveDialog — 关闭前保存询问（Excel 三按钮风格）
+├── CloseSaveDialog — 关闭前保存询问（三按钮 + 保存中防重）
+└── NotificationCenter — 文件操作的成功/失败轻提示
 ```
 
 ## 状态 & 通信
@@ -38,15 +39,17 @@ App.tsx (垂直布局)
 - **viewsMap / activeView** — 模块级 Map，**放在 React 组件外**，Vite HMR 时不丢实例
 - **mac-editor:close-tab** — 自定义事件，TabBar × 按钮 → App.tsx 保存确认
 - **mac-editor:open-search** — 自定义事件，快捷键 → 打开搜索面板
+- **mac-editor:open-goto-line** — 自定义事件，快捷键/工具栏 → 打开跳转面板
+- **mac-editor:notify** — 文件操作层 → 应用级轻提示
 
 ## 关键设计
 
 ### Editor.tsx — 编辑器核心
-- 语言变化 → **重建 EditorState**（CodeMirror 扩展不可变）
+- 语言变化 → 动态 `import()` 对应解析器，加载完成后**重建 EditorState**（CodeMirror 扩展不可变）
 - 字体/字号/换行 → **直接操作 DOM**（`.scrollDOM`, `.contentDOM`），不重建
 - 不可见字符开关 → dispatch StateEffect，不重建
 - `buildExtensions()` 返回 ~20 个扩展的数组，包括 language 包、键盘快捷键、搜索高亮
-- 语言注册表：原生 CM6 包（JS/Python/HTML…30+ 种） + `StreamLanguage` 兼容旧 mode（Go/Ruby/Perl…）
+- 语言加载器：原生 CM6 包（JS/Python/HTML…）与 `StreamLanguage` 旧 mode（Go/Ruby/Perl…）均按文件类型加载，不进入欢迎页首屏包
 - 编码检测：Rust 端用 `chardetng`，而非 JS
 - Tab 键：无选区插 `\t`，有选区调 `indentMore`
 - 多光标：Cmd+Click 添加光标，Cmd-Alt-Arrow 相邻行列光标，Shift-Alt-Arrow 列选区
@@ -85,7 +88,7 @@ App.tsx (垂直布局)
 
 ### MarkdownPreview.tsx — Markdown 实时预览
 - 仅当 `activeTab.language === 'markdown'` 时菜单栏显示预览按钮
-- 点击按钮切换 `settings.showPreview`，右侧出现预览面板（左右分屏，各占 50%）
+- 点击按钮循环切换 `settings.previewMode`（纯代码 / 分屏 / 全屏预览）
 - 使用 `marked` 库解析 Markdown → HTML，300ms debounce
 - 本地图片（绝对路径 `/Users/...` 和相对路径 `./img.png`）通过 Rust `read_image_data_url` 命令读取为 base64 data URL
 - 相对路径基于当前 Markdown 文件的 `filePath` 所在目录解析
@@ -130,6 +133,7 @@ App.tsx (垂直布局)
 | ⌘S | 保存 |
 | ⌘W | 关闭当前 tab（已修改则询问） |
 | ⌘F | 搜索 |
+| ⌘G | 跳转到行 |
 | ⌘⇧D | 按行去重 |
 | ⌘⇧I | 列编辑 |
 | ⌘= / ⌘- / ⌘0 | 放大/缩小/重置字体 |
@@ -138,7 +142,7 @@ App.tsx (垂直布局)
 ## 注意事项
 - CodeMirror language 扩展在 `EditorState.create()` 之后不能替换，只能重建编辑器
 - `buildExtensions` 依赖数组里有 `tabId`，但实际上 tabId 变 → language 变才会触发重建
-- StatusBar 用 200ms `setInterval` 轮询，不 push 式更新
+- StatusBar 直接读取活跃 EditorView；文档和选区变化由现有 Zustand 更新触发渲染
 - `SearchPanel` 的 `findAllMatches` 是 O(n) 全文档扫描，大文件可能卡
 - Rust `lib.rs` 的 `on_window_event` 使用非穷举枚举 match，加了 `_ => {}` future-proofing
 - `dragDropEnabled: false` 是必须的，否则 Tauri 原生层拦截所有 HTML5 拖拽事件

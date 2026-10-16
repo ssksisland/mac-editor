@@ -8,6 +8,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
+import { errorMessage, notify } from '../utils/notifications';
 
 interface FileReadResult {
   content: string;
@@ -90,6 +91,7 @@ export function useFileOperations() {
       addRecentFile(selected, fileName);
     } catch (error) {
       console.error('[file] Failed to open:', error);
+      notify(`无法打开文件：${errorMessage(error)}`, 'error');
     }
   };
 
@@ -121,9 +123,10 @@ export function useFileOperations() {
         editorView: null,
       });
       addRecentFile(filePath, fileName);
-    } catch {
-      // File no longer exists — remove from recent list silently
+    } catch (error) {
+      // File no longer exists or cannot be read — remove the stale recent entry.
       removeRecentFile(filePath);
+      notify(`无法打开文件，已从最近记录中移除：${errorMessage(error)}`, 'error');
     }
   };
 
@@ -143,6 +146,7 @@ export function useFileOperations() {
           encoding: activeTab.encoding,
         });
         setTabModified(activeTab.id, false);
+        notify(`已保存 ${activeTab.fileName}`, 'success', 1600);
       } else {
         const filePath = await save({ defaultPath: activeTab.fileName });
         if (!filePath) return;
@@ -162,9 +166,11 @@ export function useFileOperations() {
         setTabEncoding(activeTab.id, 'UTF-8');
         addRecentFile(filePath, fileName);
         setTabModified(activeTab.id, false);
+        notify(`已保存 ${fileName}`, 'success', 1600);
       }
     } catch (error) {
       console.error('[file] Failed to save:', error);
+      notify(`保存失败：${errorMessage(error)}`, 'error');
     }
   };
 

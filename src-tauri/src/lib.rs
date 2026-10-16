@@ -42,6 +42,40 @@ struct TodoDocument {
     todos: Vec<TodoItem>,
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorSessionTab {
+    id: String,
+    file_path: Option<String>,
+    file_name: String,
+    content: String,
+    is_modified: bool,
+    encoding: String,
+    language: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+enum EditorActivePage {
+    Editor,
+    Todo,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorSession {
+    tabs: Vec<EditorSessionTab>,
+    active_tab_id: Option<String>,
+    active_page: EditorActivePage,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct EditorSessionDocument {
+    version: u32,
+    #[serde(flatten)]
+    session: EditorSession,
+}
+
 #[derive(serde::Deserialize)]
 #[serde(untagged)]
 enum StoredTodos {
@@ -137,7 +171,11 @@ fn save_todos_to_path(path: &Path, todos: &[TodoItem]) -> Result<(), String> {
     // 临时文件名加入进程 ID + 原子自增序号，确保唯一：即便将来出现并发保存，
     // 各写入也不会争抢同一个临时文件、互相截断或在 rename 时报错。
     static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
-    let unique = format!("{}.{}", std::process::id(), TEMP_SEQ.fetch_add(1, Ordering::Relaxed));
+    let unique = format!(
+        "{}.{}",
+        std::process::id(),
+        TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+    );
     let temp = path.with_extension(format!("json.{}.tmp", unique));
     let mut file = OpenOptions::new()
         .create(true)
@@ -161,6 +199,135 @@ fn save_todos_to_path(path: &Path, todos: &[TodoItem]) -> Result<(), String> {
     Ok(())
 }
 
+fn editor_session_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("editor-session.json"))
+        .map_err(|e| format!("无法定位编辑器会话目录: {}", e))
+}
+
+fn editor_session_backup_path(path: &Path) -> PathBuf {
+    path.with_extension("json.bak")
+}
+
+fn validate_editor_session(session: &EditorSession) -> Result<(), String> {
+    if session.tabs.len() > 1_000 {
+        return Err("打开的标签页数量异常".to_string());
+    }
+
+    let mut ids = HashSet::new();
+    for tab in &session.tabs {
+        if tab.id.trim().is_empty() || tab.id.len() > 512 {
+            return Err("标签页 ID 无效".to_string());
+        }
+        if !ids.insert(tab.id.as_str()) {
+            return Err(format!("标签页 ID 重复: {}", tab.id));
+        }
+        if tab.file_name.len() > 32_768
+            || tab.encoding.len() > 256
+            || tab.language.len() > 256
+            || tab
+                .file_path
+                .as_ref()
+                .is_some_and(|path| path.len() > 32_768)
+        {
+            return Err(format!("标签页元数据过长: {}", tab.id));
+        }
+    }
+
+    match (&session.active_tab_id, session.tabs.is_empty()) {
+        (None, true) => Ok(()),
+        (Some(active_id), false) if ids.contains(active_id.as_str()) => Ok(()),
+        (None, false) => Err("非空会话缺少活跃标签页".to_string()),
+        (Some(_), true) => Err("空会话不能包含活跃标签页".to_string()),
+        (Some(active_id), false) => Err(format!("活跃标签页不存在: {}", active_id)),
+    }
+}
+
+fn read_editor_session_file(path: &Path) -> Result<EditorSession, String> {
+    let json =
+        fs::read_to_string(path).map_err(|e| format!("无法读取 {}: {}", path.display(), e))?;
+    let document: EditorSessionDocument =
+        serde_json::from_str(&json).map_err(|e| format!("无法解析 {}: {}", path.display(), e))?;
+    if document.version != 1 {
+        return Err(format!("不支持的编辑器会话版本: {}", document.version));
+    }
+    validate_editor_session(&document.session)?;
+    Ok(document.session)
+}
+
+fn load_editor_session_from_path(path: &Path) -> Result<Option<EditorSession>, String> {
+    if !path.exists() {
+        let backup = editor_session_backup_path(path);
+        return if backup.exists() {
+            read_editor_session_file(&backup).map(Some)
+        } else {
+            Ok(None)
+        };
+    }
+
+    match read_editor_session_file(path) {
+        Ok(session) => Ok(Some(session)),
+        Err(primary_error) => {
+            let backup = editor_session_backup_path(path);
+            if backup.exists() {
+                read_editor_session_file(&backup)
+                    .map(Some)
+                    .map_err(|backup_error| {
+                        format!(
+                            "编辑器会话主文件和备份均不可用: {}; {}",
+                            primary_error, backup_error
+                        )
+                    })
+            } else {
+                Err(primary_error)
+            }
+        }
+    }
+}
+
+fn save_editor_session_to_path(path: &Path, session: &EditorSession) -> Result<(), String> {
+    validate_editor_session(session)?;
+    let parent = path.parent().ok_or("无法解析编辑器会话目录")?;
+    fs::create_dir_all(parent).map_err(|e| format!("无法创建编辑器会话目录: {}", e))?;
+
+    let document = EditorSessionDocument {
+        version: 1,
+        session: session.clone(),
+    };
+    let json = serde_json::to_vec(&document).map_err(|e| format!("无法序列化编辑器会话: {}", e))?;
+    static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
+    let unique = format!(
+        "{}.{}",
+        std::process::id(),
+        TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
+    );
+    let temp = path.with_extension(format!("json.{}.tmp", unique));
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp)
+        .map_err(|e| format!("无法创建编辑器会话临时文件: {}", e))?;
+    file.write_all(&json)
+        .and_then(|_| file.sync_all())
+        .map_err(|e| format!("无法写入编辑器会话临时文件: {}", e))?;
+
+    // 仅用可验证的主文件更新备份。若本次启动正是从备份恢复，避免把损坏的
+    // 主文件反向覆盖最后一份有效备份。
+    if path.exists() && read_editor_session_file(path).is_ok() {
+        fs::copy(path, editor_session_backup_path(path))
+            .map_err(|e| format!("无法备份编辑器会话: {}", e))?;
+    }
+    fs::rename(&temp, path).map_err(|e| format!("无法替换编辑器会话文件: {}", e))?;
+
+    #[cfg(unix)]
+    if let Ok(dir) = OpenOptions::new().read(true).open(parent) {
+        let _ = dir.sync_all();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn load_todos_cmd(app: tauri::AppHandle) -> Result<Vec<TodoItem>, String> {
     load_todos_from_path(&todo_file_path(&app)?)
@@ -169,6 +336,16 @@ fn load_todos_cmd(app: tauri::AppHandle) -> Result<Vec<TodoItem>, String> {
 #[tauri::command]
 fn save_todos_cmd(app: tauri::AppHandle, todos: Vec<TodoItem>) -> Result<(), String> {
     save_todos_to_path(&todo_file_path(&app)?, &todos)
+}
+
+#[tauri::command]
+fn load_editor_session_cmd(app: tauri::AppHandle) -> Result<Option<EditorSession>, String> {
+    load_editor_session_from_path(&editor_session_file_path(&app)?)
+}
+
+#[tauri::command]
+fn save_editor_session_cmd(app: tauri::AppHandle, session: EditorSession) -> Result<(), String> {
+    save_editor_session_to_path(&editor_session_file_path(&app)?, &session)
 }
 
 #[tauri::command]
@@ -316,7 +493,9 @@ pub fn run() {
             read_image_data_url,
             take_pending_files,
             load_todos_cmd,
-            save_todos_cmd
+            save_todos_cmd,
+            load_editor_session_cmd,
+            save_editor_session_cmd
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::DragDrop(dde) = event {
@@ -385,6 +564,22 @@ mod tests {
         }
     }
 
+    fn editor_session(content: &str) -> EditorSession {
+        EditorSession {
+            tabs: vec![EditorSessionTab {
+                id: "tab-1".to_string(),
+                file_path: None,
+                file_name: "未命名".to_string(),
+                content: content.to_string(),
+                is_modified: true,
+                encoding: "UTF-8".to_string(),
+                language: "txt".to_string(),
+            }],
+            active_tab_id: Some("tab-1".to_string()),
+            active_page: EditorActivePage::Editor,
+        }
+    }
+
     #[test]
     fn saves_and_loads_todos() {
         let dir = test_dir("todo-roundtrip");
@@ -430,6 +625,57 @@ mod tests {
         fs::write(&path, serde_json::to_vec(&expected).unwrap()).unwrap();
 
         assert_eq!(load_todos_from_path(&path).unwrap(), expected);
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn saves_and_loads_editor_session() {
+        let dir = test_dir("session-roundtrip");
+        let path = dir.join("editor-session.json");
+        let expected = editor_session("崩溃前尚未保存的内容");
+
+        save_editor_session_to_path(&path, &expected).unwrap();
+        assert_eq!(
+            load_editor_session_from_path(&path).unwrap(),
+            Some(expected)
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn editor_session_falls_back_to_backup() {
+        let dir = test_dir("session-backup");
+        let path = dir.join("editor-session.json");
+        let first = editor_session("备份中的临时内容");
+
+        save_editor_session_to_path(&path, &first).unwrap();
+        save_editor_session_to_path(&path, &editor_session("更新后的内容")).unwrap();
+        fs::write(&path, "not-json").unwrap();
+
+        let recovered = load_editor_session_from_path(&path).unwrap().unwrap();
+        assert_eq!(recovered, first);
+
+        // 从备份恢复后的首次保存不能用损坏主文件覆盖有效备份。
+        save_editor_session_to_path(&path, &recovered).unwrap();
+        assert_eq!(
+            read_editor_session_file(&editor_session_backup_path(&path)).unwrap(),
+            first
+        );
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn rejects_editor_session_with_missing_active_tab() {
+        let dir = test_dir("session-validation");
+        let path = dir.join("editor-session.json");
+        let mut invalid = editor_session("内容");
+        invalid.active_tab_id = Some("missing".to_string());
+
+        assert!(save_editor_session_to_path(&path, &invalid).is_err());
+        assert!(!path.exists());
 
         let _ = fs::remove_dir_all(dir);
     }

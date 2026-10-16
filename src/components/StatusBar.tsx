@@ -4,40 +4,24 @@
  * 显示：光标位置（行/列）、文档总行数、总字符数、选中字符数、
  *       当前语言、编码。
  *
- * 行数/字符数通过 EditorView 引用 200ms 轮询获取，
- * 光标位置由 Editor 组件的 updateListener 实时推送。
+ * 直接读取活跃 EditorView 的文档和选区状态；文档或光标变化会通过
+ * Zustand 订阅触发渲染，不需要常驻轮询。
  */
-import { useState, useEffect } from 'react';
 import { useEditorStore } from '../stores/editorStore';
 import { colors } from '../styles';
 
 export default function StatusBar() {
   const cursorPosition = useEditorStore((s) => s.cursorPosition);
   const activeTab = useEditorStore((s) => s.tabs.find((t) => t.id === s.activeTabId));
-  const [totalLines, setTotalLines] = useState(0);
-  const [totalChars, setTotalChars] = useState(0);
-  const [selectedChars, setSelectedChars] = useState(0);
-
-  // Use the EditorView updateListener pattern via a lightweight polling fallback
-  // that only fires when the tab is actually focused and visible.
-  useEffect(() => {
-    const view = activeTab?.editorView;
-    if (!view) return;
-
-    const interval = setInterval(() => {
-      const doc = view.state.doc;
-      setTotalLines(doc.lines);
-      setTotalChars(doc.length);
-
-      let sel = 0;
-      for (const r of view.state.selection.ranges) {
-        if (!r.empty) sel += r.to - r.from;
-      }
-      setSelectedChars(sel);
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, [activeTab]);
+  const view = activeTab?.editorView;
+  const totalLines = view?.state.doc.lines ?? (activeTab ? 1 : 0);
+  const totalChars = view?.state.doc.length ?? activeTab?.content.length ?? 0;
+  const selectedChars = view
+    ? view.state.selection.ranges.reduce(
+        (total, range) => total + (range.empty ? 0 : range.to - range.from),
+        0,
+      )
+    : 0;
 
   return (
     <div style={styles.root}>
@@ -70,15 +54,15 @@ export default function StatusBar() {
 const styles: Record<string, React.CSSProperties> = {
   root: {
     height: 24,
-    background: colors.accent,
+    background: '#1f2937',
     color: colors.background,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '0 12px',
+    padding: '0 14px',
     fontSize: 11,
     userSelect: 'none',
   },
-  left: { display: 'flex', gap: 16 },
-  right: { display: 'flex', gap: 16 },
+  left: { display: 'flex', gap: 14, opacity: 0.9 },
+  right: { display: 'flex', gap: 14, opacity: 0.9 },
 };

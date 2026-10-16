@@ -9,6 +9,10 @@
  */
 import { create } from 'zustand';
 import type { EditorView } from '@codemirror/view';
+import {
+  scheduleEditorSessionSave,
+  type EditorSessionSnapshot,
+} from '../sessionPersistence';
 
 /** 最近打开的文件记录 */
 export interface RecentFile {
@@ -94,6 +98,8 @@ interface EditorState {
   setTabLanguage: (id: string, language: string) => void;
   /** 关联 CodeMirror EditorView 实例 */
   setEditorView: (id: string, view: EditorView) => void;
+  /** 启动时恢复上次持久化的编辑会话 */
+  restoreSession: (session: EditorSessionSnapshot) => void;
 
   // --- 光标 ---
   /** 更新光标位置（行号/列号） */
@@ -232,6 +238,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }));
   },
 
+  restoreSession: (session) => {
+    set({
+      tabs: session.tabs.map((tab) => ({ ...tab, editorView: null })),
+      activeTabId: session.activeTabId,
+      activePage: session.activePage,
+    });
+  },
+
   // 光标位置更新（由 Editor 组件的 updateListener 触发）
   setCursorPosition: (position) => set({ cursorPosition: position }),
 
@@ -288,3 +302,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }));
   },
 }));
+
+// 只监听会影响恢复结果的状态，光标移动和设置变化不会触发磁盘写入。
+useEditorStore.subscribe((state, previousState) => {
+  if (
+    state.tabs === previousState.tabs
+    && state.activeTabId === previousState.activeTabId
+    && state.activePage === previousState.activePage
+  ) {
+    return;
+  }
+
+  scheduleEditorSessionSave({
+    tabs: state.tabs.map(({ editorView: _editorView, ...tab }) => tab),
+    activeTabId: state.activeTabId,
+    activePage: state.activePage,
+  });
+});

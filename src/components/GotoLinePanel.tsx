@@ -22,6 +22,14 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
     return () => clearTimeout(t);
   }, []);
 
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   const handleGoto = () => {
     const view = activeTab?.editorView;
     if (!view) return;
@@ -41,6 +49,9 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="goto-line-title"
       style={{
         ...panelStyle(),
         top: '50%',
@@ -52,7 +63,10 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
         zIndex: 2000,
       }}
     >
-      <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 600 }}>跳转到指定行</div>
+      <div style={styles.header}>
+        <div id="goto-line-title" style={{ fontSize: 13, fontWeight: 600 }}>跳转到指定行</div>
+        <button onClick={onClose} style={styles.closeButton} aria-label="关闭跳转面板">×</button>
+      </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <input
           ref={inputRef}
@@ -62,7 +76,10 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
           placeholder={`行号 (1-${totalLines})`}
           value={lineStr}
           onChange={(e) => setLineStr(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleGoto(); } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); handleGoto(); }
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+          }}
           style={{
             flex: 1,
             padding: '8px 10px',
@@ -74,14 +91,16 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
         />
         <button
           onClick={handleGoto}
+          disabled={!lineStr}
           style={{
             padding: '8px 16px',
             border: 'none',
             borderRadius: 6,
             background: colors.accent,
             color: '#fff',
-            cursor: 'pointer',
+            cursor: lineStr ? 'pointer' : 'default',
             fontSize: 13,
+            opacity: lineStr ? 1 : 0.45,
           }}
         >
           跳转
@@ -90,3 +109,23 @@ export default function GotoLinePanel({ onClose }: GotoLinePanelProps) {
     </div>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  closeButton: {
+    width: 24,
+    height: 24,
+    border: 'none',
+    borderRadius: 5,
+    background: 'transparent',
+    color: colors.textSecondary,
+    cursor: 'pointer',
+    fontSize: 18,
+    lineHeight: 1,
+  },
+};

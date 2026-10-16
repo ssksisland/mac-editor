@@ -13,6 +13,7 @@ import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
 import { getNextUntitledName } from '../hooks/useFileOperations';
 import { colors } from '../styles';
+import { errorMessage, notify } from '../utils/notifications';
 
 export default function TabBar() {
   const tabs = useEditorStore((s) => s.tabs);
@@ -69,7 +70,7 @@ export default function TabBar() {
       } catch (err) {
         // 磁盘重命名失败（目标已存在、权限等）：保持原名，提示用户
         console.error('[rename] Failed:', err);
-        alert(`重命名失败：${err}`);
+        notify(`重命名失败：${errorMessage(err)}`, 'error');
       }
       return;
     }
@@ -130,17 +131,12 @@ export default function TabBar() {
     >
       <button
         data-tab
-        className="todo-fixed-tab"
+        className={`todo-fixed-tab${activePage === 'todo' ? ' is-active' : ''}`}
         onClick={showTodoPage}
         title="Todo List"
         style={{
           ...styles.todoTab,
-          background: activePage === 'todo' ? colors.background : 'transparent',
           color: activePage === 'todo' ? colors.accent : colors.textTertiary,
-          borderRadius: activePage === 'todo' ? '7px 7px 0 0' : 0,
-          boxShadow: activePage === 'todo'
-            ? '0 -1px 2px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)'
-            : 'none',
         }}
       >
         <span className="todo-fixed-tab-icon" aria-hidden="true">✓</span>
@@ -165,6 +161,7 @@ export default function TabBar() {
         <div
           key={tab.id}
           data-tab
+          className={`editor-tab${isActive ? ' is-active' : ''}`}
           draggable={editingId !== tab.id}
           onClick={() => setActiveTab(tab.id)}
           onDoubleClick={(e) => { e.stopPropagation(); startEdit(tab.id, tab.fileName); }}
@@ -172,12 +169,6 @@ export default function TabBar() {
           onDragOver={(e) => handleDragOver(e, idx)}
           style={{
             ...styles.tab,
-            background: isActive ? colors.background : 'transparent',
-            color: isActive ? colors.text : colors.textSecondary,
-            borderRadius: isActive ? '7px 7px 0 0' : 0,
-            boxShadow: isActive
-              ? '0 -1px 2px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)'
-              : 'none',
             borderLeft: showBarLeft ? `2px solid ${colors.accent}` : 'none',
             borderRight: showBarRight
               ? `2px solid ${colors.accent}`
@@ -200,6 +191,7 @@ export default function TabBar() {
               onClick={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
               style={styles.editInput}
+              aria-label={`重命名 ${tab.fileName}`}
             />
           ) : (
             <span style={styles.tabName} title={tab.fileName}>
@@ -208,6 +200,7 @@ export default function TabBar() {
             </span>
           )}
           <button
+            className="tab-close-button"
             onClick={(e) => {
               e.stopPropagation();
               if (tab.isModified) {
@@ -217,6 +210,8 @@ export default function TabBar() {
               }
             }}
             style={styles.closeBtn}
+            aria-label={`关闭 ${tab.fileName}`}
+            title="关闭"
           >
             ×
           </button>
@@ -242,8 +237,8 @@ function blankTab(tabs: Array<{ fileName: string }>) {
 
 const styles: Record<string, React.CSSProperties> = {
   root: {
-    height: 38,
-    background: '#e8e8ea',
+    height: 40,
+    background: colors.surfaceAlt,
     borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     alignItems: 'stretch',
@@ -260,7 +255,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   todoTab: {
     flex: '0 0 auto',
-    minWidth: 94,
+    minWidth: 96,
     padding: '0 15px',
     border: 'none',
     borderRight: `1px solid ${colors.border}`,
@@ -278,11 +273,10 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 12px',
     cursor: 'pointer',
     fontSize: 13,
-    minWidth: 100,
-    maxWidth: 200,
+    minWidth: 116,
+    maxWidth: 220,
     // Chrome inactive tab: flat, blends into the strip
     border: 'none',
-    borderRadius: 0,
     position: 'relative',
   },
   // 非活跃 tab 之间的竖分隔线（用 ::after 伪元素不好做 inline style，
@@ -292,7 +286,6 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    color: colors.text,
   },
   editInput: {
     flex: 1,
@@ -306,11 +299,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   closeBtn: {
     marginLeft: 8,
-    background: 'none',
     border: 'none',
     cursor: 'pointer',
     fontSize: 16,
-    color: colors.textSecondary,
     padding: '0 4px',
     lineHeight: 1,
   },

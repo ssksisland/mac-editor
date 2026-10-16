@@ -21,7 +21,7 @@ App.tsx (垂直布局)
 │   ├── invisibleChars.ts   — 不可见字符显示（ViewPlugin + WidgetType）
 │   └── GotoLinePanel
 ├── MarkdownPreview — Markdown 实时预览（左右分屏，300ms debounce）
-├── StatusBar     — 行列号 / 编码 / 语言（200ms 轮询）
+├── StatusBar     — 行列号 / 编码 / 语言（由 Zustand 状态更新触发渲染）
 ├── SearchPanel   — 搜索+替换（正则/Case/转义序列/标记所有）
 ├── TodoPage      — 固定 Todo 标签页，新建/编辑/完成/删除，按创建日期分组
 ├── CloseSaveDialog — 关闭前保存询问（三按钮 + 保存中防重）
@@ -32,6 +32,7 @@ App.tsx (垂直布局)
 
 - **Zustand store** (`stores/editorStore.ts`) — tabs[], activeTabId, settings, cursor position, recent files（localStorage 持久化）, moveTab
 - **Zustand store** (`stores/todoStore.ts`) — Todo 项列表与异步持久化，Tauri 下保存到应用数据目录 `todos.json`
+- **sessionPersistence.ts** — 启动时恢复编辑会话；编辑变更延迟保存、连续输入周期保存、退出前刷新。Tauri 下保存到 `editor-session.json` 并保留备份，浏览器下使用 localStorage
 - **window.__macEditor** — 菜单栏按钮 → 编辑器实例的桥，绕过 React 树
   - `selectColumn()` — 所有行同列添加光标
   - `deduplicateLines()` — 按行去重（SQL DISTINCT）
@@ -74,6 +75,7 @@ App.tsx (垂直布局)
 - `save_file_cmd` — 写磁盘
 - `detect_encoding_cmd` — 仅返回编码名
 - `read_image_data_url` — 读取图片文件并返回 base64 data URL（用于 Markdown 预览）
+- `load_editor_session_cmd` / `save_editor_session_cmd` — 校验并恢复/保存编辑会话，原子替换主文件并保留有效备份
 - 拖拽事件：Tauri `DragDropEvent` → JS `window.__handleFileDrop()`
 
 ### 拖拽（useDragAndDrop.ts）
@@ -109,20 +111,20 @@ App.tsx (垂直布局)
 
 | 文件 | 字段 | 作用 |
 |------|------|------|
-| `package.json` | `version` | npm 脚本显示（`mac-editor@0.3.0 tauri`）|
+| `package.json` | `version` | npm 脚本显示（`mac-editor@1.2.0 tauri`）|
 | `src-tauri/tauri.conf.json` | `version` | 打包文件名（DMG、App）|
 | `src-tauri/Cargo.toml` | `version` | Rust 侧版本 |
 | Git tag | `vX.Y.Z` | GitHub Releases |
 
-完整流程：
+完整流程遵循 `devops.md`，发版改动也必须通过 PR 合入 `main`：
 1. 更新 `CHANGELOG.md`（新版本章节）
 2. 更新 `CLAUDE.md`（架构/设计有变化时）
 3. 更新 `README.md`（版本号 + 新功能列表）
-4. 更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 的 version
-5. `npm run tauri build` 构建 DMG
-6. 将 DMG 拷到 `releases/`：`cp src-tauri/target/release/bundle/dmg/mac-editor_X.Y.Z_aarch64.dmg releases/`
-7. `git add` + `git commit` + `git tag -a vX.Y.Z`
-8. `git push origin main --tags`
+4. 在发版分支更新 `package.json`、`tauri.conf.json`、`Cargo.toml` 的 version，同步 `package-lock.json` 与 `Cargo.lock`
+5. 提交并推送发版分支，创建 PR；CI 通过后 squash 合并，随后同步本地 `main`
+6. 在合并后的 `main` 创建 annotated tag：`git tag -a vX.Y.Z -m "vX.Y.Z：发布说明"`，再 `git push origin vX.Y.Z`
+7. `npm run tauri build` 构建对应版本的 DMG
+8. 使用 `gh release create vX.Y.Z <DMG路径>` 发布并上传安装包；DMG 通过 GitHub Releases 分发，不提交到 git
 
 ## 快捷键
 

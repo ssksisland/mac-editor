@@ -61,6 +61,7 @@ export default function MenuBar() {
   const updateSettings = useEditorStore((s) => s.updateSettings);
   // 修改当前 tab 语言的 action
   const setTabLanguage = useEditorStore((s) => s.setTabLanguage);
+  const enableLanguageDetection = useEditorStore((s) => s.enableLanguageDetection);
 
   // 控制最近文件菜单的展开/收起
   const [showRecent, setShowRecent] = useState(false);
@@ -80,7 +81,9 @@ export default function MenuBar() {
 
   // 语言选择变更时，更新当前活跃 tab 的语言设置
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    if (activeTab) setTabLanguage(activeTab.id, e.target.value);
+    if (!activeTab) return;
+    if (e.target.value === 'auto') enableLanguageDetection(activeTab.id);
+    else setTabLanguage(activeTab.id, e.target.value);
   };
 
   return (
@@ -337,13 +340,18 @@ export default function MenuBar() {
       {/* 语言选择下拉 */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <select
-          value={activeTab?.language || 'txt'}
+          value={activeTab?.languageSource === 'manual' ? activeTab.language : 'auto'}
           onChange={handleLanguageChange}
           style={select}
           title="语言"
           aria-label="语法语言"
           disabled={!editorEnabled}
         >
+          <option value="auto">
+            自动检测{activeTab && activeTab.language !== 'txt'
+              ? `（${LANGUAGES.find((item) => item.value === activeTab.language)?.label || activeTab.language}）`
+              : ''}
+          </option>
           {LANGUAGES.map((l) => (
             <option key={l.value} value={l.value}>{l.label}</option>
           ))}

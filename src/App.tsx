@@ -176,7 +176,7 @@ function App() {
         const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || tab.fileName;
         const store = useEditorStore.getState();
         store.setTabFilePath(tab.id, filePath, fileName);
-        store.setTabLanguage(tab.id, detectLanguage(fileName));
+        store.setTabLanguage(tab.id, detectLanguage(fileName), 'filename');
         store.setTabEncoding(tab.id, 'UTF-8');
         store.setTabModified(tab.id, false);
         store.addRecentFile(filePath, fileName);

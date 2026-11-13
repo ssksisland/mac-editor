@@ -162,7 +162,7 @@ export function useFileOperations() {
         const language = detectLanguage(fileName);
 
         setTabFilePath(activeTab.id, filePath, fileName);
-        setTabLanguage(activeTab.id, language);
+        setTabLanguage(activeTab.id, language, 'filename');
         setTabEncoding(activeTab.id, 'UTF-8');
         addRecentFile(filePath, fileName);
         setTabModified(activeTab.id, false);

@@ -66,7 +66,7 @@ export default function TabBar() {
         });
         useEditorStore.getState().renameRecentFile(tab.filePath, newPath, name);
         setTabFilePath(id, newPath, name);
-        setTabLanguage(id, lang);
+        setTabLanguage(id, lang, 'filename');
       } catch (err) {
         // 磁盘重命名失败（目标已存在、权限等）：保持原名，提示用户
         console.error('[rename] Failed:', err);
@@ -77,7 +77,7 @@ export default function TabBar() {
 
     // 未保存的新建 tab：磁盘上无文件，仅改显示名
     setTabFileName(id, name);
-    setTabLanguage(id, lang);
+    setTabLanguage(id, lang, 'filename');
   };
 
   const handleDragStart = useCallback((e: React.DragEvent, index: number) => {

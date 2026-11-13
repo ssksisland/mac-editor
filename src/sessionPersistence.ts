@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { errorMessage, notify } from './utils/notifications';
+import type { LanguageSource } from './utils/languageDetectionPolicy';
 
 const BROWSER_STORAGE_KEY = 'mac-editor-session-v1';
 const IDLE_SAVE_DELAY_MS = 250;
@@ -13,6 +14,7 @@ export interface PersistedTab {
   isModified: boolean;
   encoding: string;
   language: string;
+  languageSource?: LanguageSource;
 }
 
 export interface EditorSessionSnapshot {
@@ -37,7 +39,8 @@ function isPersistedTab(value: unknown): value is PersistedTab {
     && typeof tab.content === 'string'
     && typeof tab.isModified === 'boolean'
     && typeof tab.encoding === 'string'
-    && typeof tab.language === 'string';
+    && typeof tab.language === 'string'
+    && (tab.languageSource === undefined || ['auto', 'filename', 'manual'].includes(tab.languageSource as string));
 }
 
 function parseSession(value: unknown): EditorSessionSnapshot {

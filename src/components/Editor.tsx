@@ -8,8 +8,8 @@
  * 4. 将文档变更和光标位置同步回 Zustand store
  * 5. 字体/字号/换行等样式变更通过直接操作 DOM 实现（避免重建编辑器）
  */
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { EditorState, EditorSelection, SelectionRange, type Extension } from '@codemirror/state';
+import { useEffect, useRef, useCallback } from 'react';
+import { Compartment, EditorState, EditorSelection, SelectionRange, type Extension } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -43,6 +43,7 @@ import { highlightField } from '../searchHighlight';
 import { invisibleChars, toggleInvisible } from './invisibleChars';
 import { lineBookmark, toggleBookmarkEffect } from '../lineBookmark';
 import { errorMessage, notify } from '../utils/notifications';
+import { useLanguageDetection } from '../hooks/useLanguageDetection';
 
 /* ==================== 语言扩展注册表 ====================
  *
@@ -275,7 +276,7 @@ interface EditorProps {
  * Editor 组件 — 为单个 tab 渲染一个 CodeMirror 编辑器实例。
  *
  * 生命周期：
- * - language 变化 → 销毁旧实例，重建 EditorState（语言扩展不可变）
+ * - language 变化 → 用 Compartment 动态更新语法，保留历史/选区/行标记
  * - fontSize/fontFamily/wordWrap 变化 → 直接操作 DOM，不重建实例
  * - isActive 变化 → 切换 focus 状态
  * - showInvisibleChars 变化 → dispatch effect 切换不可见字符显示
@@ -289,7 +290,9 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
   const initialContentRef = useRef(initialContent);
   // 活跃状态 ref（在闭包中获取最新值，避免依赖项变化）
   const isActiveRef = useRef(isActive);
-  const [languageExtension, setLanguageExtension] = useState<Extension>(NO_LANGUAGE);
+  const languageCompartment = useRef(new Compartment());
+
+  useLanguageDetection(tabId, isActive);
 
   // 从 store 订阅编辑器设置
   const fontSize = useEditorStore((s) => s.settings.fontSize);
@@ -301,12 +304,14 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
     let cancelled = false;
     void loadLanguageExtension(language).then(
       (extension) => {
-        if (!cancelled) setLanguageExtension(extension);
+        if (!cancelled && viewRef.current) {
+          viewRef.current.dispatch({ effects: languageCompartment.current.reconfigure(extension) });
+        }
       },
       (error) => {
         console.error(`[language] Failed to load ${language}:`, error);
         if (!cancelled) {
-          setLanguageExtension(NO_LANGUAGE);
+          viewRef.current?.dispatch({ effects: languageCompartment.current.reconfigure(NO_LANGUAGE) });
           notify(`无法加载 ${language} 语法高亮：${errorMessage(error)}`, 'error');
         }
       },
@@ -318,7 +323,7 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
    * 构建 CodeMirror 扩展数组。
    * 包含：行号、历史记录、括号匹配、自动补全、缩进、主题、
    *        自定义快捷键、搜索高亮、语言扩展等。
-   * 依赖项变化时会触发 EditorState 重建（仅 language 变化时实际发生）。
+   * 语言扩展放在 Compartment 中，切换语言不重建编辑器。
    */
   const buildExtensions = useCallback(() => {
     return [
@@ -485,25 +490,18 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       xcodeLight,  // Xcode 风格主题
       highlightField,  // 搜索匹配高亮
       wordWrap ? EditorView.lineWrapping : [],  // 自动换行
-      languageExtension,  // 按文件类型动态加载的语法高亮扩展
+      languageCompartment.current.of(NO_LANGUAGE),
       invisibleChars(),  // 不可见字符显示
     ];
-  }, [languageExtension, fontSize, fontFamily, wordWrap, tabId]);
+  }, [fontSize, fontFamily, wordWrap, tabId]);
 
   /**
    * 创建 CodeMirror 编辑器实例。
-   * 仅在异步语言扩展加载完成后重建（因为语言扩展不可变）。
+   * 每个标签只创建一个实例；语法高亮通过 Compartment 单独更新。
    * 字体/字号/换行通过另一个 effect 直接操作 DOM，避免频繁重建。
    */
   useEffect(() => {
     if (!containerRef.current) return;
-
-    // 如果已存在实例，先销毁再重建
-    if (viewRef.current) {
-      viewRef.current.destroy();
-      viewRef.current = null;
-      containerRef.current.innerHTML = '';
-    }
 
     const state = EditorState.create({
       doc: initialContentRef.current || '',
@@ -530,7 +528,9 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
     }
 
     if (isActiveRef.current) {
-      requestAnimationFrame(() => view.focus());
+      requestAnimationFrame(() => {
+        if (viewRef.current === view) view.focus();
+      });
     }
 
     /* Cmd+Click 添加光标 — 支持多光标编辑。
@@ -575,7 +575,7 @@ export default function Editor({ tabId, isActive, initialContent, language }: Ed
       viewRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [languageExtension]);
+  }, [tabId]);
 
   // 不可见字符开关 — 通过 effect 切换，不重建编辑器
   useEffect(() => {

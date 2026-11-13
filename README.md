@@ -6,6 +6,7 @@
 
 - **多标签页编辑** — Chrome 风格标签栏，支持拖拽排序、双击重命名（同步重命名磁盘文件）
 - **语法高亮** — 30+ 种语言，自动检测文件类型并按需加载对应解析器
+- **内容语言检测** — 集成 VS Code 使用的本地语言检测模型，未命名或无法通过文件名识别的文本在输入/粘贴后自动选择高亮；语言菜单可切换自动检测或手动指定，重启后保留选择
 - **Markdown 预览** — 三种模式（纯代码 / 分屏 / 预览全屏）单按钮循环切换，支持本地图片、页内锚点跳转
 - **搜索 & 替换** — 正则、大小写、转义序列、全部替换
 - **快速导航** — 工具栏与快捷键支持查找（⌘F）、跳转到行（⌘G）和标签切换
@@ -42,7 +43,11 @@ sudo xattr -rd com.apple.quarantine /Applications/mac-editor.app
 npm install
 npm run tauri dev    # 桌面 App
 npm run dev          # 纯浏览器（文件 I/O 不可用）
+npm test             # 检测策略、标签状态、Worker 客户端及实际模型测试
+npm run test:browser # 需要本机 Chrome；构建后验证识别、撤销、选区及本地模型加载
 ```
+
+内容检测使用 [VS Code 开源模型](https://github.com/microsoft/vscode-languagedetection)，模型资源随应用打包并在本地 Worker 中运行；短文本和候选接近时可能需要继续输入或手动选择。相关许可随构建附在 `licenses/vscode-languagedetection.txt`。
 
 ## 构建
 
@@ -75,4 +80,4 @@ Todo 数据保存在 Tauri 应用数据目录的 `todos.json` 中。macOS 默认
 
 ## 版本
 
-当前版本：**v1.2.0** — 详见 [CHANGELOG.md](CHANGELOG.md)
+当前版本：**v1.3.0** — 本地代码语言自动检测，详见 [CHANGELOG.md](CHANGELOG.md)

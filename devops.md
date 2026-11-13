@@ -75,7 +75,7 @@ git pull
 
 | Job | 作用 | 是否门禁 |
 |-----|------|---------|
-| `Frontend (tsc)` | TypeScript 类型检查 | ✅ 必须通过 |
+| `Frontend (tsc)` | TypeScript 类型检查、前端单元测试与生产构建 | ✅ 必须通过 |
 | `Rust (cargo check)` | Rust 编译检查（Linux，需 apt 装 Tauri 系统依赖） | ✅ 必须通过 |
 | `LLM Review` | LLM 审查 diff，行级评论 | ❌ 仅建议，不阻断 |
 

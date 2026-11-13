@@ -27,6 +27,12 @@ jobs:
       - name: TypeScript 类型检查
         run: npx tsc --noEmit
 
+      - name: 前端单元测试
+        run: npm test
+
+      - name: 前端生产构建
+        run: npm run build
+
   # 任务二：Rust 编译检查
   rust:
     name: Rust (cargo check)

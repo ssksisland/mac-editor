@@ -8,6 +8,8 @@ Tauri 2 桌面代码编辑器 — React 19 + CodeMirror 6 + Zustand 5 + Vite 7.
 npm run dev          # 纯浏览器（Vite），文件 I/O 不可用
 npm run tauri dev    # 桌面 App，含 Rust 后端
 npm run build        # 生产构建
+npm test             # 检测策略、标签状态、Worker 客户端与实际模型测试
+npm run test:browser # 本机 Chrome 上运行生产构建交互回归测试
 ```
 
 ## 架构
@@ -19,7 +21,8 @@ App.tsx (垂直布局)
 ├── Editor        — CodeMirror 6 封装，一个 tab 一个实例
 │   ├── searchHighlight.ts  — 搜索匹配高亮（StateEffect + StateField）
 │   ├── invisibleChars.ts   — 不可见字符显示（ViewPlugin + WidgetType）
-│   └── GotoLinePanel
+│   ├── useLanguageDetection — 当前标签内容检测，600ms 防抖，过期结果丢弃
+│   └── languageDetection.worker.ts — 本地语法特征与 VS Code 模型识别
 ├── MarkdownPreview — Markdown 实时预览（左右分屏，300ms debounce）
 ├── StatusBar     — 行列号 / 编码 / 语言（由 Zustand 状态更新触发渲染）
 ├── SearchPanel   — 搜索+替换（正则/Case/转义序列/标记所有）
@@ -46,7 +49,12 @@ App.tsx (垂直布局)
 ## 关键设计
 
 ### Editor.tsx — 编辑器核心
-- 语言变化 → 动态 `import()` 对应解析器，加载完成后**重建 EditorState**（CodeMirror 扩展不可变）
+- 语言变化 → 动态 `import()` 对应解析器，通过 `Compartment.reconfigure()` 更新扩展，保留 EditorView、历史、选区与行标记
+- 内容检测：当前标签处于自动模式且文件名无法确定语言时，停止输入 600ms 后检测前 10,000 个字符；少于 20 个字符（去除首尾空白）时使用纯文本
+- 检测顺序：明确语法特征 → `@vscode/vscode-languagedetection` 模型。模型第一候选须受支持、分数至少 0.20 且领先第二候选至少 0.10；不确定时保留当前语言
+- 全窗口共用一个按需创建的 Worker，模型推理串行执行、权重按需加载并缓存；内容/文件名/手动模式变化后丢弃旧结果
+- `languageSource` 区分 `auto` / `filename` / `manual`，手动选择及已知文件名优先，并随浏览器和 Rust 会话持久化
+- 模型版本固定为 1.0.23；`vite.config.ts` 将其动态 CPU chunk 改为静态引用，开发预打包和生产 Worker 均需保持此适配
 - 字体/字号/换行 → **直接操作 DOM**（`.scrollDOM`, `.contentDOM`），不重建
 - 不可见字符开关 → dispatch StateEffect，不重建
 - `buildExtensions()` 返回 ~20 个扩展的数组，包括 language 包、键盘快捷键、搜索高亮
@@ -111,7 +119,7 @@ App.tsx (垂直布局)
 
 | 文件 | 字段 | 作用 |
 |------|------|------|
-| `package.json` | `version` | npm 脚本显示（`mac-editor@1.2.0 tauri`）|
+| `package.json` | `version` | npm 脚本显示（`mac-editor@1.3.0 tauri`）|
 | `src-tauri/tauri.conf.json` | `version` | 打包文件名（DMG、App）|
 | `src-tauri/Cargo.toml` | `version` | Rust 侧版本 |
 | Git tag | `vX.Y.Z` | GitHub Releases |
@@ -142,8 +150,8 @@ App.tsx (垂直布局)
 | ⌘Tab / ⌘⇧Tab | 切换 tab |
 
 ## 注意事项
-- CodeMirror language 扩展在 `EditorState.create()` 之后不能替换，只能重建编辑器
-- `buildExtensions` 依赖数组里有 `tabId`，但实际上 tabId 变 → language 变才会触发重建
+- CodeMirror 语言扩展必须放在 `Compartment` 中再动态替换，不能为语言切换重建 EditorView，否则会丢失编辑状态
+- Worker 中已经开始的检测不会中断；主线程取消待启动的防抖任务并忽略过期结果，样本未变时尚无结果缓存
 - StatusBar 直接读取活跃 EditorView；文档和选区变化由现有 Zustand 更新触发渲染
 - `SearchPanel` 的 `findAllMatches` 是 O(n) 全文档扫描，大文件可能卡
 - Rust `lib.rs` 的 `on_window_event` 使用非穷举枚举 match，加了 `_ => {}` future-proofing

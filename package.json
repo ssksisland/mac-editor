@@ -1,11 +1,13 @@
 {
   "name": "mac-editor",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:browser": "npm run build && node tests/browser/languageDetection.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -35,6 +37,7 @@
     "@tauri-apps/plugin-fs": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2",
     "@uiw/codemirror-theme-xcode": "^4.25.9",
+    "@vscode/vscode-languagedetection": "1.0.23",
     "marked": "^18.0.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -46,7 +49,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "playwright": "^1.65.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^5.1.0"
   }
 }

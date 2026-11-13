@@ -9,6 +9,8 @@
  */
 import { create } from 'zustand';
 import type { EditorView } from '@codemirror/view';
+import { detectLanguage } from '../utils/detectLanguage';
+import { canDetectLanguage, getInitialLanguageSource, type LanguageSource } from '../utils/languageDetectionPolicy';
 import {
   scheduleEditorSessionSave,
   type EditorSessionSnapshot,
@@ -53,6 +55,7 @@ export interface Tab {
   isModified: boolean;
   encoding: string;
   language: string;
+  languageSource?: LanguageSource;
   editorView: EditorView | null;
 }
 
@@ -95,7 +98,11 @@ interface EditorState {
   /** 设置 tab 编码 */
   setTabEncoding: (id: string, encoding: string) => void;
   /** 设置 tab 语言 */
-  setTabLanguage: (id: string, language: string) => void;
+  setTabLanguage: (id: string, language: string, source?: LanguageSource) => void;
+  /** 恢复自动选择：优先文件名，否则根据内容检测 */
+  enableLanguageDetection: (id: string) => void;
+  /** 仅将结果应用到仍匹配请求快照的自动模式标签 */
+  applyDetectedLanguage: (id: string, content: string, fileName: string, language: string) => void;
   /** 关联 CodeMirror EditorView 实例 */
   setEditorView: (id: string, view: EditorView) => void;
   /** 启动时恢复上次持久化的编辑会话 */
@@ -142,7 +149,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addTab: (tab) => {
     const id = generateId();
     set((state) => ({
-      tabs: [...state.tabs, { ...tab, id }],
+      tabs: [...state.tabs, { ...tab, id, languageSource: getInitialLanguageSource(tab) }],
       activeTabId: id,
       activePage: 'editor',
     }));
@@ -221,11 +228,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   // 切换语法高亮语言
-  setTabLanguage: (id, language) => {
+  setTabLanguage: (id, language, source = 'manual') => {
     set((state) => ({
-      tabs: state.tabs.map((t) =>
-        t.id === id ? { ...t, language } : t
-      ),
+      tabs: state.tabs.map((t) => {
+        if (t.id !== id) return t;
+        // 保存/重命名产生的文件名判断不能覆盖用户的手动选择。
+        if (source === 'filename' && getInitialLanguageSource(t) === 'manual') return t;
+        if (source === 'filename' && language === 'txt') {
+          return { ...t, languageSource: 'auto' };
+        }
+        return { ...t, language, languageSource: source };
+      }),
+    }));
+  },
+
+  enableLanguageDetection: (id) => {
+    set((state) => ({
+      tabs: state.tabs.map((t) => {
+        if (t.id !== id) return t;
+        const language = detectLanguage(t.fileName);
+        return { ...t, language, languageSource: language === 'txt' ? 'auto' : 'filename' };
+      }),
+    }));
+  },
+
+  applyDetectedLanguage: (id, content, fileName, language) => {
+    const tab = get().tabs.find((t) => t.id === id);
+    if (!tab || !canDetectLanguage(tab) || tab.content !== content || tab.fileName !== fileName) return;
+    if (tab.language === language && tab.languageSource === 'auto') return;
+    set((state) => ({
+      tabs: state.tabs.map((t) => t.id === id ? { ...t, language, languageSource: 'auto' } : t),
     }));
   },
 
@@ -240,7 +272,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   restoreSession: (session) => {
     set({
-      tabs: session.tabs.map((tab) => ({ ...tab, editorView: null })),
+      tabs: session.tabs.map((tab) => ({
+        ...tab, editorView: null, languageSource: getInitialLanguageSource(tab),
+      })),
       activeTabId: session.activeTabId,
       activePage: session.activePage,
     });

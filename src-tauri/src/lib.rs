@@ -52,6 +52,16 @@ struct EditorSessionTab {
     is_modified: bool,
     encoding: String,
     language: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    language_source: Option<EditorLanguageSource>,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+enum EditorLanguageSource {
+    Auto,
+    Filename,
+    Manual,
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -574,6 +584,7 @@ mod tests {
                 is_modified: true,
                 encoding: "UTF-8".to_string(),
                 language: "txt".to_string(),
+                language_source: None,
             }],
             active_tab_id: Some("tab-1".to_string()),
             active_page: EditorActivePage::Editor,
@@ -642,6 +653,33 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preserves_language_source_and_reads_legacy_session() {
+        let mut session = editor_session("def greet():\n    print('hello')");
+        session.tabs[0].language = "python".to_string();
+        for source in [
+            EditorLanguageSource::Auto,
+            EditorLanguageSource::Manual,
+            EditorLanguageSource::Filename,
+        ] {
+            session.tabs[0].language_source = Some(source);
+            let json = serde_json::to_string(&session).unwrap();
+            assert_eq!(
+                serde_json::from_str::<EditorSession>(&json).unwrap(),
+                session
+            );
+        }
+
+        let mut legacy = serde_json::to_value(&session).unwrap();
+        legacy["tabs"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("languageSource");
+        let restored: EditorSession = serde_json::from_value(legacy).unwrap();
+        assert_eq!(restored.tabs[0].language_source, None);
+        assert_eq!(restored.tabs[0].language, "python");
     }
 
     #[test]

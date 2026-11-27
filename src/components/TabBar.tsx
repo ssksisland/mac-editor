@@ -7,12 +7,12 @@
  * - 双击空白区域新建空白 tab
  * - 每个 tab 有关闭按钮，修改过的 tab 名称前显示 ● 标记
  */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useLayoutEffect, useRef } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useEditorStore } from '../stores/editorStore';
 import { detectLanguage } from '../utils/detectLanguage';
 import { getNextUntitledName } from '../hooks/useFileOperations';
-import { colors } from '../styles';
+import { colors, sizes } from '../styles';
 import { errorMessage, notify } from '../utils/notifications';
 
 export default function TabBar() {
@@ -34,9 +34,84 @@ export default function TabBar() {
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragIndexRef = useRef<number | null>(null);
   const dropIndexRef = useRef<number | null>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLDivElement>(null);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+
+  const updateScrollEdges = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = viewport;
+    const left = scrollLeft > 1;
+    const right = scrollWidth - clientWidth - scrollLeft > 1;
+    setScrollEdges((edges) => edges.left === left && edges.right === right ? edges : { left, right });
+  }, []);
+
+  useLayoutEffect(() => {
+    const rail = railRef.current;
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    if (!rail || !viewport || !track) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return;
+      // 视口上的横向手势交给系统，箭头上的横向手势也滚动同一排标签。
+      if (event.deltaX && viewport.contains(event.target as Node)) return;
+
+      const delta = event.deltaX || event.deltaY;
+      if (!delta) return;
+
+      const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? viewport.clientWidth : 1;
+      const previousLeft = viewport.scrollLeft;
+      viewport.scrollLeft += delta * scale;
+      if (viewport.scrollLeft !== previousLeft) event.preventDefault();
+    };
+
+    const observer = new ResizeObserver(updateScrollEdges);
+    observer.observe(viewport);
+    observer.observe(track);
+    rail.addEventListener('wheel', handleWheel, { passive: false });
+    updateScrollEdges();
+    return () => {
+      observer.disconnect();
+      rail.removeEventListener('wheel', handleWheel);
+    };
+  }, [updateScrollEdges]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const tab = activeTabRef.current;
+    if (!viewport || !tab) return;
+
+    const viewportBounds = viewport.getBoundingClientRect();
+    const tabBounds = tab.getBoundingClientRect();
+    // 为两侧箭头和渐变留出空间，窗口过窄时尽量显示完整标签。
+    const edgeWidth = parseFloat(getComputedStyle(viewport).scrollPaddingLeft) || 0;
+    const padding = Math.min(edgeWidth, Math.max(0, (viewportBounds.width - tabBounds.width) / 2));
+    const leftGap = tabBounds.left - viewportBounds.left - padding;
+    const rightGap = tabBounds.right - viewportBounds.right + padding;
+    const offset = leftGap < -1 ? leftGap : Math.max(0, rightGap);
+    if (Math.abs(offset) <= 1) return;
+
+    viewport.scrollLeft += offset;
+    updateScrollEdges();
+  }, [activePage, activeTabId, updateScrollEdges]);
+
+  const scrollTabs = (direction: 'left' | 'right') => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollBy({
+      left: viewport.clientWidth * 0.7 * (direction === 'left' ? -1 : 1),
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    });
+  };
 
   const handleDoubleClickBar = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-tab]')) return;
+    if ((e.target as Element).closest('[data-tab], .tab-scroll-arrow')) return;
     addTab(blankTab(tabs));
   };
 
@@ -142,81 +217,105 @@ export default function TabBar() {
         <span className="todo-fixed-tab-icon" aria-hidden="true">✓</span>
         <span>Todo</span>
       </button>
-      {tabs.length === 0 && activePage !== 'todo' && (
-        <span style={styles.emptyLabel}>没有打开的文件</span>
-      )}
-      {tabs.map((tab, idx) => {
-        // 蓝色插入指示线：dropIndex 是插入位置 (0 ~ tabs.length)
-        const showBarLeft = dropIndex !== null && dropIndex === idx
-          && dragIndex !== idx && dragIndex !== idx - 1;
-        const showBarRight = dropIndex !== null && dropIndex === tabs.length
-          && idx === tabs.length - 1
-          && dragIndex !== tabs.length - 1 && dragIndex !== tabs.length;
+      <div ref={railRef} className="tab-scroll-rail" data-reordering={dragIndex !== null}>
+        <div ref={viewportRef} className="tab-scroll-viewport" onScroll={updateScrollEdges}>
+          <div ref={trackRef} className="tab-scroll-track">
+            {tabs.length === 0 && activePage !== 'todo' && (
+              <span style={styles.emptyLabel}>没有打开的文件</span>
+            )}
+            {tabs.map((tab, idx) => {
+              // 蓝色插入指示线：dropIndex 是插入位置 (0 ~ tabs.length)
+              const showBarLeft = dropIndex !== null && dropIndex === idx
+                && dragIndex !== idx && dragIndex !== idx - 1;
+              const showBarRight = dropIndex !== null && dropIndex === tabs.length
+                && idx === tabs.length - 1
+                && dragIndex !== tabs.length - 1 && dragIndex !== tabs.length;
 
-        const isActive = activePage === 'editor' && tab.id === activeTabId;
-        const nextIsActive = activePage === 'editor' && tabs[idx + 1]?.id === activeTabId;
-        const separator = !isActive && !nextIsActive && idx < tabs.length - 1;
+              const isActive = activePage === 'editor' && tab.id === activeTabId;
+              const nextIsActive = activePage === 'editor' && tabs[idx + 1]?.id === activeTabId;
+              const separator = !isActive && !nextIsActive && idx < tabs.length - 1;
 
-        return (
-        <div
-          key={tab.id}
-          data-tab
-          className={`editor-tab${isActive ? ' is-active' : ''}`}
-          draggable={editingId !== tab.id}
-          onClick={() => setActiveTab(tab.id)}
-          onDoubleClick={(e) => { e.stopPropagation(); startEdit(tab.id, tab.fileName); }}
-          onDragStart={(e) => handleDragStart(e, idx)}
-          onDragOver={(e) => handleDragOver(e, idx)}
-          style={{
-            ...styles.tab,
-            borderLeft: showBarLeft ? `2px solid ${colors.accent}` : 'none',
-            borderRight: showBarRight
-              ? `2px solid ${colors.accent}`
-              : separator
-                ? `1px solid ${colors.borderLight}`
-                : 'none',
-            opacity: dragIndex === idx ? 0.5 : 1,
-          }}
-        >
-          {editingId === tab.id ? (
-            <input
-              autoFocus
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={finishEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') finishEdit();
-                if (e.key === 'Escape') { setEditingId(null); setEditName(''); }
-              }}
-              onClick={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-              style={styles.editInput}
-              aria-label={`重命名 ${tab.fileName}`}
-            />
-          ) : (
-            <span style={styles.tabName} title={tab.fileName}>
-              {tab.isModified ? <span style={{ fontSize: 7, verticalAlign: 'middle', marginRight: 5, position: 'relative', top: -1 }}>●</span> : ''}
-              {tab.fileName}
-            </span>
-          )}
-          <button
-            className="tab-close-button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (tab.isModified) {
-                window.dispatchEvent(new CustomEvent('mac-editor:close-tab', { detail: tab }));
-              } else {
-                removeTab(tab.id);
-              }
-            }}
-            style={styles.closeBtn}
-            aria-label={`关闭 ${tab.fileName}`}
-            title="关闭"
-          >
-            ×
-          </button>
+              return (
+                <div
+                  key={tab.id}
+                  ref={isActive ? activeTabRef : null}
+                  data-tab
+                  className={`editor-tab${isActive ? ' is-active' : ''}`}
+                  draggable={editingId !== tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  onDoubleClick={(e) => { e.stopPropagation(); startEdit(tab.id, tab.fileName); }}
+                  onDragStart={(e) => handleDragStart(e, idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  style={{
+                    ...styles.tab,
+                    borderLeft: showBarLeft ? `2px solid ${colors.accent}` : 'none',
+                    borderRight: showBarRight
+                      ? `2px solid ${colors.accent}`
+                      : separator
+                        ? `1px solid ${colors.borderLight}`
+                        : 'none',
+                    opacity: dragIndex === idx ? 0.5 : 1,
+                  }}
+                >
+                  {editingId === tab.id ? (
+                    <input
+                      autoFocus
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      onBlur={finishEdit}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') finishEdit();
+                        if (e.key === 'Escape') { setEditingId(null); setEditName(''); }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      style={styles.editInput}
+                      aria-label={`重命名 ${tab.fileName}`}
+                    />
+                  ) : (
+                    <span style={styles.tabName} title={tab.fileName}>
+                      {tab.isModified ? <span style={{ fontSize: 7, verticalAlign: 'middle', marginRight: 5, position: 'relative', top: -1 }}>●</span> : ''}
+                      {tab.fileName}
+                    </span>
+                  )}
+                  <button
+                    className="tab-close-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (tab.isModified) {
+                        window.dispatchEvent(new CustomEvent('mac-editor:close-tab', { detail: tab }));
+                      } else {
+                        removeTab(tab.id);
+                      }
+                    }}
+                    style={styles.closeBtn}
+                    aria-label={`关闭 ${tab.fileName}`}
+                    title="关闭"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      );})}
+        {(['left', 'right'] as const).map((direction) => scrollEdges[direction] && (
+          <div key={direction} className={`tab-scroll-edge tab-scroll-edge--${direction}`}>
+            <button
+              type="button"
+              className="tab-scroll-arrow"
+              aria-label={direction === 'left' ? '查看左侧标签' : '查看右侧标签'}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => scrollTabs(direction)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={direction === 'left' ? 'M9.5 4.5 6 8l3.5 3.5' : 'M6.5 4.5 10 8l-3.5 3.5'} />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -235,14 +334,15 @@ function blankTab(tabs: Array<{ fileName: string }>) {
 
 /* --- Styles --- */
 
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, React.CSSProperties & { '--tab-bar-surface'?: string }> = {
   root: {
-    height: 40,
-    background: colors.surfaceAlt,
+    '--tab-bar-surface': colors.surfaceAlt,
+    height: sizes.tabBarHeight,
+    flexShrink: 0,
+    background: 'var(--tab-bar-surface)',
     borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     alignItems: 'stretch',
-    overflowX: 'auto',
     cursor: 'pointer',
   },
   emptyLabel: {
@@ -269,6 +369,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tab: {
     display: 'flex',
+    flex: '0 0 auto',
     alignItems: 'center',
     padding: '0 12px',
     cursor: 'pointer',

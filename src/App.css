@@ -152,6 +152,81 @@ input:focus-visible {
   color: #3d4653;
 }
 
+.tab-scroll-rail {
+  --tab-scroll-edge-width: 42px;
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tab-scroll-viewport {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: none;
+  scroll-padding-inline: var(--tab-scroll-edge-width);
+}
+
+.tab-scroll-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-scroll-track {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+}
+
+.tab-scroll-edge {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  width: var(--tab-scroll-edge-width);
+  padding: 0 3px;
+  pointer-events: none;
+}
+
+.tab-scroll-edge--left {
+  left: 0;
+  background: linear-gradient(to right, var(--tab-bar-surface) 60%, transparent);
+}
+
+.tab-scroll-edge--right {
+  right: 0;
+  justify-content: flex-end;
+  background: linear-gradient(to left, var(--tab-bar-surface) 60%, transparent);
+}
+
+.tab-scroll-arrow {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5c6470;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.tab-scroll-arrow:hover {
+  background: #e0e6ee;
+  color: #1f2328;
+}
+
+.tab-scroll-arrow:focus-visible {
+  outline-offset: -2px;
+}
+
+.tab-scroll-rail[data-reordering='true'] .tab-scroll-arrow {
+  pointer-events: none;
+}
+
 .todo-fixed-tab,
 .editor-tab {
   background: transparent;
@@ -525,6 +600,10 @@ input:focus-visible {
 
 .cm-editor.cm-focused {
   outline: none;
+}
+
+.cm-editor .cm-selectionBackground {
+  border-radius: 3px;
 }
 
 .cm-scroller {
